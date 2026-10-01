@@ -18,6 +18,10 @@ export default tseslint.config(
     },
   },
   {
+    files: ['scripts/**'],
+    languageOptions: { globals: globals.node },
+  },
+  {
     // The engine and world generator are pure: no UI, storage, or worker imports.
     files: ['src/engine/**', 'src/world/**'],
     rules: {

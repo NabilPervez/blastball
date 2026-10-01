@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { computeStandings } from '../../engine/season';
 import { gamesOn, isSeasonOver, seasonDays } from '../../world/universe';
+import { InstallBanner } from '../components/InstallBanner';
 import { useGame } from '../store';
 import { GameCard, TimeControls } from './Games';
 
@@ -37,6 +38,8 @@ export function Today() {
           </button>
         </p>
       </header>
+
+      <InstallBanner ready={u.currentDay > 1} />
 
       {over ? (
         <div className="card callout">

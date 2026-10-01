@@ -6,7 +6,7 @@ export function Stars({ value, label }: { value: number; label: string }) {
   return (
     <span className="stars" aria-label={`${label}: ${value} out of 5 stars`} title={`${label} ${value}★`}>
       {'★'.repeat(full)}
-      {half ? '⯪' : ''}
+      {half ? <span className="star-half">★</span> : ''}
       <span className="stars-empty">{'☆'.repeat(5 - full - (half ? 1 : 0))}</span>
     </span>
   );

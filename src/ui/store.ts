@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { GameEvent } from '../engine/types';
 import * as store from '../storage/db';
 import { sim } from '../worker/client';
+import { requestPersistenceOnce } from './pwa';
 import { createUniverse, reduce, type Command, type UniverseSettings, type UniverseState, type WorldEvent } from '../world/universe';
 
 export type Tab = 'today' | 'games' | 'league' | 'vote' | 'history' | 'settings';
@@ -111,6 +112,7 @@ export const useGame = create<State>((set, get) => ({
       const result = await sim().runCommand(u, cmd);
       await store.persistCommand(u, result);
       set({ u: result.state });
+      void requestPersistenceOnce();
     } catch (e) {
       set({ error: message(e) });
     } finally {

@@ -278,4 +278,5 @@ The only thing to watch: make sure `sw.js` / `index.html` aren't cached aggressi
 |---|---|
 | 1 | ✅ Done — live at https://blastball-sim.netlify.app/ |
 | 2 | ✅ Done — saves, universes, full season, time controls. Simulation already runs in a Web Worker (pulled forward from Sprint 3). Multi-day sims snapshot once at the end of the command, not every day. |
-| 3–10 | Not started |
+| 3 | ✅ Done — cards (procedural art, rarity, flip), team/player pages, search, PWA (offline verified on a production build with the server stopped), persist(), install prompt, Settings, .league export/import. Not yet done: a Lighthouse run and an on-phone install check — do these on the live Netlify URL. |
+| 4–10 | Not started |
