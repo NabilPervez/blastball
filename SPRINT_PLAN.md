@@ -276,5 +276,6 @@ The only thing to watch: make sure `sw.js` / `index.html` aren't cached aggressi
 
 | Sprint | Status |
 |---|---|
-| 1 | ✅ Built & pushed — awaiting your review on Netlify |
-| 2–10 | Not started |
+| 1 | ✅ Done — live at https://blastball-sim.netlify.app/ |
+| 2 | ✅ Done — saves, universes, full season, time controls. Simulation already runs in a Web Worker (pulled forward from Sprint 3). Multi-day sims snapshot once at the end of the command, not every day. |
+| 3–10 | Not started |

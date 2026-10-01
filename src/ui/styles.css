@@ -175,3 +175,43 @@ h2 { font-size: 1.2rem; color: var(--muted); margin: 28px 0 12px; }
   .standings .city { display: none; }
   .standings th, .standings td { padding: 10px 8px; }
 }
+
+/* Sprint 2: universes, top bar, time controls */
+.solo { max-width: 640px; margin: 0 auto; padding: 32px 16px 48px; }
+.solo .btn.primary { margin: 16px 0; }
+.universe-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+.universe-row { display: flex; align-items: center; gap: 8px; padding: 8px 12px 8px 4px; }
+.universe-open { flex: 1; min-width: 0; text-align: left; background: none; border: 0; padding: 8px 10px; display: grid; gap: 2px; min-height: 44px; }
+.universe-open strong { font-size: 1.3rem; }
+.universe-open .small { overflow-wrap: anywhere; }
+.chip.danger { color: var(--bad); }
+.create-form { display: grid; gap: 18px; }
+.create-form label { display: grid; gap: 6px; font-weight: 600; }
+.create-form input, .field {
+  min-height: 44px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--surface); color: var(--text); font-weight: 400; min-width: 0;
+}
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.row input { flex: 1; }
+.choice { border: 0; padding: 0; margin: 0; }
+.choice legend { font-weight: 600; margin-bottom: 6px; padding: 0; }
+.choice-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.topbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: -8px 0 12px; }
+.topbar-universe { display: flex; align-items: center; gap: 10px; background: none; border: 0; padding: 4px 0; min-height: 44px; min-width: 0; }
+.topbar-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.brand-mini { font-weight: 800; font-size: 1.3rem; }
+.brand-mini span { color: var(--primary); }
+@media (min-width: 900px) { .brand-mini { display: none; } }
+.time-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 16px; }
+.time-controls .btn.primary { margin-top: 0; width: auto; }
+.btn:disabled { opacity: 0.5; cursor: progress; }
+.callout { padding: 20px; margin-top: 16px; }
+.callout p { margin: 0 0 4px; }
+.big-ish { font-size: 2rem; line-height: 1.1; }
+.error-banner {
+  position: fixed; top: 12px; left: 12px; right: 12px; z-index: 50; display: flex; gap: 12px; align-items: center;
+  justify-content: space-between; padding: 10px 14px; border-radius: 12px; background: #3a1010; border: 1px solid var(--bad);
+}
+.game-card { padding: 0; }
+.gc-main { display: grid; gap: 6px; padding: 14px; width: 100%; background: none; border: 0; text-align: left; }
+@media (max-width: 480px) { .gc-row .city { display: none; } }

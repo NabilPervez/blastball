@@ -15,27 +15,27 @@ export function stars(player: Player, group: StarGroup): number {
 }
 
 /**
- * Round-robin schedule (circle method). Every team plays every other team once per cycle;
- * home/away alternate between cycles. Requires an even number of teams.
+ * Round-robin schedule (circle method): every team plays exactly one game per day, and every
+ * other team once per cycle of n-1 days. Home/away alternate between cycles. Requires an even
+ * number of teams. `days` = games per team in the season.
  */
-export function generateSchedule(teams: Team[], cycles: number): ScheduledGame[] {
+export function generateSchedule(teams: Team[], days: number): ScheduledGame[] {
   const ids = teams.map((t) => t.id);
   const n = ids.length;
   const games: ScheduledGame[] = [];
-  let day = 1;
-  for (let cycle = 0; cycle < cycles; cycle++) {
-    const rot = [...ids];
-    for (let round = 0; round < n - 1; round++) {
-      for (let i = 0; i < n / 2; i++) {
-        let a = rot[i];
-        let b = rot[n - 1 - i];
-        if ((round + cycle) % 2 === 1) [a, b] = [b, a];
-        games.push({ id: `d${day}g${i + 1}`, day, awayId: a, homeId: b });
-      }
-      // Keep the first team fixed, rotate the rest.
-      rot.splice(1, 0, rot.pop()!);
-      day++;
+  let rot = [...ids];
+  for (let day = 1; day <= days; day++) {
+    const round = (day - 1) % (n - 1);
+    const cycle = Math.floor((day - 1) / (n - 1));
+    if (round === 0) rot = [...ids];
+    for (let i = 0; i < n / 2; i++) {
+      let a = rot[i];
+      let b = rot[n - 1 - i];
+      if ((round + cycle + i) % 2 === 1) [a, b] = [b, a];
+      games.push({ id: `d${day}g${i + 1}`, day, awayId: a, homeId: b });
     }
+    // Keep the first team fixed, rotate the rest.
+    rot.splice(1, 0, rot.pop()!);
   }
   return games;
 }
@@ -48,7 +48,9 @@ export interface StandingRow {
   runsAgainst: number;
 }
 
-export function computeStandings(teams: Team[], results: GameResult[]): StandingRow[] {
+export type ScoreLine = Pick<GameResult, 'awayId' | 'homeId' | 'awayScore' | 'homeScore'>;
+
+export function computeStandings(teams: Team[], results: ScoreLine[]): StandingRow[] {
   const rows = new Map<string, StandingRow>(
     teams.map((t) => [t.id, { teamId: t.id, wins: 0, losses: 0, runsFor: 0, runsAgainst: 0 }]),
   );

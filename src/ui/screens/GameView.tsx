@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { simulateGame } from '../../engine/game';
+import { useEffect, useRef, useState } from 'react';
+import type { GameEvent } from '../../engine/types';
 import { describeEvent, isBigMoment } from '../../narrative/playByPlay';
 import { BaseDiamond, Outs, TeamBadge } from '../components/bits';
 import { useGame } from '../store';
@@ -10,39 +10,61 @@ const SPEEDS = [
   { label: '5×', ms: 300 },
 ] as const;
 
-/** Play-by-play events that change the visible situation are shown; pitch-level noise is kept but de-emphasized. */
 export function GameView({ gameId }: { gameId: string }) {
-  const { league, schedule, results, playGame, watch } = useGame();
-  const game = schedule.find((g) => g.id === gameId)!;
-  const alreadyPlayed = !!results[gameId];
-  // Pure + deterministic, so computing it here gives the same result the store will record.
-  const result = useMemo(() => results[gameId] ?? simulateGame(league, game), [league, game, results, gameId]);
-  const total = result.events.length;
+  const u = useGame((s) => s.u)!;
+  const { run, watch, playByPlay } = useGame();
+  const game = u.schedule.find((g) => g.id === gameId)!;
+  const alreadyPlayed = !!u.results[gameId];
+  const playable = game.day === u.currentDay;
 
-  const [shown, setShown] = useState(alreadyPlayed ? total : 1);
+  const [events, setEvents] = useState<GameEvent[] | null>(null);
+  const [shown, setShown] = useState(0);
   const [speed, setSpeed] = useState<number>(SPEEDS[0].ms);
   const [paused, setPaused] = useState(false);
-  const done = shown >= total;
+
+  // Load once. The sim is deterministic, so replaying an unplayed game shows exactly what will be recorded.
+  const startedPlayed = useRef(alreadyPlayed);
+  useEffect(() => {
+    let live = true;
+    playByPlay(gameId).then((evts) => {
+      if (!live) return;
+      setEvents(evts);
+      setShown(startedPlayed.current || !playable ? evts.length : 1);
+    });
+    return () => {
+      live = false;
+    };
+  }, [gameId, playByPlay, playable]);
+
+  const total = events?.length ?? 0;
+  const done = events !== null && shown >= total;
 
   useEffect(() => {
-    if (done || paused) return;
+    if (!events || done || paused) return;
     const t = setTimeout(() => setShown((n) => Math.min(n + 1, total)), speed);
     return () => clearTimeout(t);
-  }, [shown, done, paused, speed, total]);
+  }, [events, shown, done, paused, speed, total]);
 
   // Record the result once the player has seen the final out.
-  const recorded = useRef(alreadyPlayed);
   useEffect(() => {
-    if (done && !recorded.current) {
-      recorded.current = true;
-      playGame(gameId);
-    }
-  }, [done, gameId, playGame]);
+    if (done && playable && !u.results[gameId]) run({ type: 'playGame', gameId });
+  }, [done, playable, gameId, u.results, run]);
 
-  const away = league.teams.find((t) => t.id === game.awayId)!;
-  const home = league.teams.find((t) => t.id === game.homeId)!;
-  const current = result.events[shown - 1];
-  const feed = result.events.slice(0, shown).map((e, i) => ({ e, i })).reverse();
+  const away = u.league.teams.find((t) => t.id === game.awayId)!;
+  const home = u.league.teams.find((t) => t.id === game.homeId)!;
+
+  if (!events) return <p className="muted">Loading game…</p>;
+  if (!playable && !alreadyPlayed) {
+    return (
+      <section>
+        <button className="link-btn" onClick={() => watch(null)}>← All games</button>
+        <p className="muted">This game is on day {game.day}. It can be watched when that day comes.</p>
+      </section>
+    );
+  }
+
+  const current = events[Math.max(0, shown - 1)];
+  const feed = events.slice(0, shown).map((e, i) => ({ e, i })).reverse();
 
   return (
     <section className="game-view" aria-label={`${away.name} at ${home.name}`}>
@@ -57,9 +79,7 @@ export function GameView({ gameId }: { gameId: string }) {
           <span className="sb-score">{current.score.away}</span>
         </div>
         <div className="sb-mid">
-          <span className="sb-inning">
-            {done ? 'FINAL' : `${current.half === 'top' ? '▲' : '▼'} ${current.inning}`}
-          </span>
+          <span className="sb-inning">{done ? 'FINAL' : `${current.half === 'top' ? '▲' : '▼'} ${current.inning}`}</span>
           {!done && (
             <>
               <BaseDiamond bases={current.bases} />
@@ -82,7 +102,15 @@ export function GameView({ gameId }: { gameId: string }) {
             {paused ? '▶ Play' : '❚❚ Pause'}
           </button>
           {SPEEDS.map((s) => (
-            <button key={s.label} className="chip" aria-pressed={!paused && speed === s.ms} onClick={() => { setSpeed(s.ms); setPaused(false); }}>
+            <button
+              key={s.label}
+              className="chip"
+              aria-pressed={!paused && speed === s.ms}
+              onClick={() => {
+                setSpeed(s.ms);
+                setPaused(false);
+              }}
+            >
               {s.label}
             </button>
           ))}
@@ -95,7 +123,7 @@ export function GameView({ gameId }: { gameId: string }) {
       <ol className="feed" aria-live={done ? 'off' : 'polite'} aria-label="Play-by-play">
         {feed.map(({ e, i }) => (
           <li key={i} className={`feed-item ${isBigMoment(e) ? 'big' : ''} k-${e.kind}`}>
-            {describeEvent(league, e, i, game.id)}
+            {describeEvent(u.league, e, i, game.id)}
           </li>
         ))}
       </ol>

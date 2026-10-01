@@ -1,7 +1,9 @@
+import { useEffect } from 'react';
 import { useGame, type Tab } from './store';
 import { Games } from './screens/Games';
 import { League } from './screens/League';
 import { ComingSoon, Today } from './screens/Today';
+import { CreateUniverse, Picker } from './screens/Universes';
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'today', label: 'Today', icon: '◉' },
@@ -11,10 +13,55 @@ const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'history', label: 'History', icon: '⧗' },
 ];
 
+function ErrorBanner() {
+  const { error, clearError } = useGame();
+  if (!error) return null;
+  return (
+    <div className="error-banner" role="alert">
+      <span>{error}</span>
+      <button className="chip" onClick={clearError}>
+        Dismiss
+      </button>
+    </div>
+  );
+}
+
+function TopBar() {
+  const u = useGame((s) => s.u)!;
+  const { showPicker } = useGame();
+  return (
+    <header className="topbar">
+      <button className="topbar-universe" onClick={showPicker} aria-label="Switch universe">
+        <span className="brand-mini display">
+          B<span>B</span>
+        </span>
+        <span className="topbar-name">{u.settings.name}</span>
+        <span className="muted small">⇄</span>
+      </button>
+    </header>
+  );
+}
+
 export function App() {
-  const { tab, setTab } = useGame();
+  const { view, tab, setTab, init } = useGame();
+
+  useEffect(() => {
+    init();
+  }, [init]);
+
+  if (view === 'loading') return <p className="solo muted">Loading…</p>;
+  if (view === 'picker')
+    return (
+      <>
+        <ErrorBanner />
+        <Picker />
+      </>
+    );
+  if (view === 'create') return <CreateUniverse />;
+
   return (
     <div className="app">
+      <ErrorBanner />
       <nav className="nav" aria-label="Main">
         <div className="brand display">
           BLAST<span>BALL</span>
@@ -29,6 +76,7 @@ export function App() {
         ))}
       </nav>
       <main className="main">
+        <TopBar />
         {tab === 'today' && <Today />}
         {tab === 'games' && <Games />}
         {tab === 'league' && <League />}

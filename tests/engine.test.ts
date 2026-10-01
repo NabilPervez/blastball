@@ -54,7 +54,7 @@ describe('world generator', () => {
 describe('game engine', () => {
   const schedule = (seed: string) => {
     const league = generateLeague({ seed });
-    return { league, games: generateSchedule(league.teams, 2) };
+    return { league, games: generateSchedule(league.teams, 14) };
   };
 
   it('same seed ⇒ identical game results', () => {
@@ -100,7 +100,7 @@ describe('game engine', () => {
 describe('season', () => {
   it('round robin: each team plays every other team once per cycle, one game per day', () => {
     const league = generateLeague({ seed: 's' });
-    const games = generateSchedule(league.teams, 1);
+    const games = generateSchedule(league.teams, 7);
     expect(games).toHaveLength(28);
     const pairs = new Set(games.map((g) => [g.awayId, g.homeId].sort().join('-')));
     expect(pairs.size).toBe(28);
@@ -112,7 +112,7 @@ describe('season', () => {
 
   it('standings are consistent with results', () => {
     const league = generateLeague({ seed: 'st' });
-    const results = generateSchedule(league.teams, 1).map((g) => simulateGame(league, g));
+    const results = generateSchedule(league.teams, 7).map((g) => simulateGame(league, g));
     const table = computeStandings(league.teams, results);
     expect(table.reduce((s, r) => s + r.wins, 0)).toBe(results.length);
     expect(table.reduce((s, r) => s + r.losses, 0)).toBe(results.length);

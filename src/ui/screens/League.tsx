@@ -4,7 +4,8 @@ import { Stars, TeamBadge } from '../components/bits';
 import { useGame } from '../store';
 
 export function League() {
-  const { league, results } = useGame();
+  const u = useGame((s) => s.u)!;
+  const { league, results } = u;
   const [openTeam, setOpenTeam] = useState<string | null>(null);
   const table = computeStandings(league.teams, Object.values(results));
   const teamById = (id: string) => league.teams.find((t) => t.id === id)!;
