@@ -3,6 +3,8 @@ import { ENGINE_VERSION, simulateGame } from '../engine/game';
 import { oddsForGame } from '../engine/odds';
 import { computeStandings, generateSchedule } from '../engine/season';
 import type { GameEvent, League, ScheduledGame } from '../engine/types';
+import { applyEffect, marginalCost, openElection, playerVoteTotal, tally, winnerOf, type Election } from './elections';
+import { createFactions, type Faction } from './factions';
 import { generateLeague } from './generate';
 import { personaMultiplier, winningPayout, type Persona } from './persona';
 
@@ -11,7 +13,7 @@ import { personaMultiplier, winningPayout, type Persona } from './persona';
  * `reduce(state, event)`, so the same events always produce the same state.
  */
 
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 
 export const STARTING_COINS = 100;
 /** Small daily allowance so a broke fan can always get back in the game. */
@@ -88,6 +90,17 @@ export interface UniverseState {
   persona: Persona | null;
   /** Most recent coin movements, newest last. */
   ledger: LedgerEntry[];
+  factions: Faction[];
+  /** Every election this universe has held; the last one is open while result === null. */
+  elections: Election[];
+  /** Headlines: faction reactions, election results. Newest last. */
+  news: NewsItem[];
+}
+
+export interface NewsItem {
+  season: number;
+  day: number;
+  text: string;
 }
 
 export type WorldEvent =
@@ -95,11 +108,12 @@ export type WorldEvent =
   | { type: 'gamePlayed'; summary: GameSummary; box: BoxScore }
   | { type: 'dayEnded'; day: number }
   | { type: 'personaChosen'; persona: Persona }
-  | { type: 'betPlaced'; gameId: string; teamId: string; amount: number };
+  | { type: 'betPlaced'; gameId: string; teamId: string; amount: number }
+  | { type: 'votesBought'; electionId: number; proposal: number; count: number };
 
 export function createUniverse(id: string, settings: UniverseSettings, now: number, persona: Persona | null = null): UniverseState {
   const league = generateLeague({ seed: settings.seed, name: settings.name, teamCount: settings.leagueSize });
-  return {
+  const base: UniverseState = {
     saveVersion: SAVE_VERSION,
     engineVersion: ENGINE_VERSION,
     id,
@@ -118,7 +132,11 @@ export function createUniverse(id: string, settings: UniverseSettings, now: numb
     bets: [],
     persona,
     ledger: [],
+    factions: createFactions(settings.seed, league.teams.map((t) => t.id)),
+    elections: [],
+    news: [],
   };
+  return withNewElection(base, 1);
 }
 
 export const seasonDays = (s: UniverseState) => s.settings.seasonLength;
@@ -163,6 +181,79 @@ const teamName = (s: UniverseState, id: string) => s.league.teams.find((t) => t.
 
 const withLedger = (s: UniverseState, amount: number, reason: string, day = s.currentDay): LedgerEntry[] =>
   [...s.ledger, { season: s.season, day, amount, reason }].slice(-LEDGER_KEPT);
+
+const NEWS_KEPT = 120;
+const withNews = (s: UniverseState, texts: string[], day = s.currentDay): NewsItem[] =>
+  [...s.news, ...texts.map((text) => ({ season: s.season, day, text }))].slice(-NEWS_KEPT);
+
+/** The election currently accepting votes, if any. */
+export const currentElection = (s: UniverseState): Election | null => {
+  const e = s.elections[s.elections.length - 1];
+  return e && !e.result ? e : null;
+};
+
+const publicStandings = (s: UniverseState) =>
+  computeStandings(s.league.teams, Object.values(s.results)).map((r) => ({ teamId: r.teamId, wins: r.wins, losses: r.losses }));
+
+/** Open the next weekly election starting on `openedDay` (no-op past the end of the season). */
+export function withNewElection(s: UniverseState, openedDay: number): UniverseState {
+  if (openedDay > seasonDays(s)) return s;
+  const e = openElection(s.league, s.factions, publicStandings(s), s.elections.length + 1, s.season, openedDay, seasonDays(s));
+  // The faction most committed to a single proposal makes the headline.
+  let loudest = s.factions[0];
+  let loudestPick = 0;
+  for (const f of s.factions) {
+    const votes = e.factionVotes[f.id];
+    const pick = votes.indexOf(Math.max(...votes));
+    if (votes[pick] > e.factionVotes[loudest.id][loudestPick]) {
+      loudest = f;
+      loudestPick = pick;
+    }
+  }
+  return {
+    ...s,
+    elections: [...s.elections, e],
+    news: withNews(
+      s,
+      [
+        `Election #${e.id} is open until the end of day ${e.closesDay}: ${e.proposals.map((p) => p.title).join(' · ')}.`,
+        `${loudest.name} throw their weight behind “${e.proposals[loudestPick].title}”.`,
+      ],
+      openedDay,
+    ),
+  };
+}
+
+/** Why votes can't be bought, or null if they can. */
+export function voteError(s: UniverseState, electionId: number, proposal: number, count: number): string | null {
+  const e = currentElection(s);
+  if (!e || e.id !== electionId) return 'This election is closed.';
+  if (!Number.isInteger(proposal) || proposal < 0 || proposal >= e.proposals.length) return 'No such proposal.';
+  if (!Number.isInteger(count) || count < 1) return 'Buy at least 1 vote.';
+  const cost = marginalCost(playerVoteTotal(e), count, s.persona?.kind === 'organizer');
+  if (cost > s.coins) return `Not enough coins (needs ${cost}).`;
+  return null;
+}
+
+function resolveElection(s: UniverseState, e: Election, day: number): UniverseState {
+  const totals = tally(e);
+  const winner = winnerOf(totals);
+  const proposal = e.proposals[winner];
+  const { league, notes } = applyEffect(s.league, proposal.effect);
+  const playerLog = { ...s.playerLog };
+  for (const n of notes) playerLog[n.playerId] = [...(playerLog[n.playerId] ?? []), { season: s.season, day, text: n.text }];
+
+  const headlines = [`Election #${e.id}: “${proposal.title}” wins with ${totals[winner]} votes.`];
+  if (playerVoteTotal(e) > 0) {
+    const without = tally({ ...e, playerVotes: e.playerVotes.map(() => 0) });
+    const fan = s.persona?.fanName || 'A mysterious fan';
+    if (winnerOf(without) !== winner) headlines.push(`${fan}'s ${e.playerVotes[winner]} votes swung the election!`);
+    else headlines.push(`${fan} cast ${playerVoteTotal(e)} votes.`);
+  }
+
+  const elections = s.elections.map((x) => (x.id === e.id ? { ...x, result: { winner, totals } } : x));
+  return { ...s, league, playerLog, elections, news: withNews(s, headlines, day) };
+}
 
 /** Story-worthy notes for a player's life timeline, from one game's box score. */
 function notesFor(line: StatLine, career: StatLine | undefined): string[] {
@@ -211,13 +302,41 @@ export function reduce(state: UniverseState, event: WorldEvent): UniverseState {
     }
 
     case 'dayEnded':
+    {
       if (event.day !== state.currentDay) return state;
-      return {
+      let next: UniverseState = {
         ...state,
         currentDay: state.currentDay + 1,
         coins: state.coins + DAILY_STIPEND,
         ledger: withLedger(state, DAILY_STIPEND, 'Daily fan stipend'),
       };
+      const open = currentElection(next);
+      if (open && open.closesDay <= event.day) {
+        next = resolveElection(next, open, event.day);
+        next = withNewElection(next, event.day + 1);
+      } else if (!open) {
+        next = withNewElection(next, event.day + 1); // e.g. saves from before elections existed
+      }
+      return next;
+    }
+
+    case 'votesBought': {
+      const { electionId, proposal, count } = event;
+      if (voteError(state, electionId, proposal, count)) return state;
+      const e = currentElection(state)!;
+      const cost = marginalCost(playerVoteTotal(e), count, state.persona?.kind === 'organizer');
+      const updated: Election = {
+        ...e,
+        playerVotes: e.playerVotes.map((v, i) => (i === proposal ? v + count : v)),
+        coinsSpent: e.coinsSpent + cost,
+      };
+      return {
+        ...state,
+        coins: state.coins - cost,
+        elections: state.elections.map((x) => (x.id === e.id ? updated : x)),
+        ledger: withLedger(state, -cost, `${count} vote${count === 1 ? '' : 's'}: ${e.proposals[proposal].title}`),
+      };
+    }
 
     case 'personaChosen':
       if (state.persona) return state; // chosen once per universe

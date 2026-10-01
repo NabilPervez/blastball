@@ -144,7 +144,7 @@ describe('save migration v1 → v2', () => {
   it('old saves load with a starting coin balance and no persona yet', async () => {
     const raw = (await import('./fixtures/save-v1.json')).default;
     const u = migrateSave(structuredClone(raw));
-    expect(u.saveVersion).toBe(2);
+    expect(u.saveVersion).toBe(3);
     expect(u.coins).toBe(100);
     expect(u.bets).toEqual([]);
     expect(u.persona).toBeNull();
@@ -154,12 +154,19 @@ describe('save migration v1 → v2', () => {
 });
 
 describe('save fixtures', () => {
-  it('a real v2 save (Sprint 4) loads unchanged and stays playable', async () => {
+  it('a real v2 save (Sprint 4) migrates to v3 and stays playable', async () => {
     const raw = (await import('./fixtures/save-v2.json')).default;
     const u = migrateSave(structuredClone(raw));
-    expect(u).toEqual(raw);
+    expect(u.coins).toBe(raw.coins);
+    expect(u.bets).toEqual(raw.bets);
+    expect(u.factions).toHaveLength(6);
+    expect(u.elections).toEqual([]);
     expect(u.persona?.kind).toBe('gambler');
     expect(u.bets[0].status).not.toBe('open');
-    expect(runCommand(u, { type: 'endDay' }).state.currentDay).toBe(4);
+    const next = runCommand(u, { type: 'endDay' }).state;
+    expect(next.currentDay).toBe(4);
+    // The first election opens for migrated saves once the day ends.
+    expect(next.elections).toHaveLength(1);
+    expect(next.elections[0].openedDay).toBe(4);
   });
 });

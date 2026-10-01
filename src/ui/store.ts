@@ -36,7 +36,8 @@ interface State {
   /** Apply a single player-driven event (bets, watching…) and save it. */
   dispatch(event: WorldEvent): Promise<void>;
   watch(gameId: string | null): Promise<void>;
-  playByPlay(gameId: string): Promise<GameEvent[]>;
+  /** Play-by-play for a game, or null if it was played long ago and its feed has been archived. */
+  playByPlay(gameId: string): Promise<GameEvent[] | null>;
   clearError(): void;
 }
 
@@ -142,7 +143,11 @@ export const useGame = create<State>((set, get) => ({
 
   playByPlay: async (gameId) => {
     const u = get().u!;
-    return (await store.loadPlayByPlay(u.id, u.season, gameId)) ?? (await sim().replayGame(u, gameId));
+    const saved = await store.loadPlayByPlay(u.id, u.season, gameId);
+    if (saved) return saved;
+    // Unplayed games can be previewed exactly (deterministic). Played games can't be replayed
+    // once elections have changed the league, so their feed is gone after compaction.
+    return u.results[gameId] ? null : sim().replayGame(u, gameId);
   },
 
   clearError: () => set({ error: null }),

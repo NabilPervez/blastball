@@ -18,6 +18,7 @@ export function GameView({ gameId }: { gameId: string }) {
   const playable = game.day === u.currentDay;
 
   const [events, setEvents] = useState<GameEvent[] | null>(null);
+  const [archived, setArchived] = useState(false);
   const [shown, setShown] = useState(0);
   const [speed, setSpeed] = useState<number>(SPEEDS[0].ms);
   const [paused, setPaused] = useState(false);
@@ -28,6 +29,10 @@ export function GameView({ gameId }: { gameId: string }) {
     let live = true;
     playByPlay(gameId).then((evts) => {
       if (!live) return;
+      if (!evts) {
+        setArchived(true);
+        return;
+      }
       setEvents(evts);
       setShown(startedPlayed.current || !playable ? evts.length : 1);
     });
@@ -53,6 +58,20 @@ export function GameView({ gameId }: { gameId: string }) {
   const away = u.league.teams.find((t) => t.id === game.awayId)!;
   const home = u.league.teams.find((t) => t.id === game.homeId)!;
 
+  if (archived) {
+    const r = u.results[gameId];
+    return (
+      <section>
+        <button className="link-btn" onClick={() => watch(null)}>← All games</button>
+        <div className="card pad">
+          <p className="display big-ish">
+            {away.name} {r.awayScore} – {r.homeScore} {home.name}
+          </p>
+          <p className="muted">Final{r.innings > 9 ? ` (${r.innings} innings)` : ''}. Play-by-play is kept for the last 7 days; this game's feed has been archived.</p>
+        </div>
+      </section>
+    );
+  }
   if (!events) return <p className="muted">Loading game…</p>;
   if (!playable && !alreadyPlayed) {
     return (

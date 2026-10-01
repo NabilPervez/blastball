@@ -1,3 +1,4 @@
+import { createFactions } from '../world/factions';
 import { SAVE_VERSION, type UniverseState } from '../world/universe';
 
 /** Raised when a save was written by a newer version of the game than this one. */
@@ -18,6 +19,12 @@ type Migration = (save: Record<string, unknown>) => Record<string, unknown>;
 export const migrations: Record<number, Migration> = {
   // v1 → v2 (Sprint 4): coins, betting, fan persona. Old saves get the starting balance and pick a persona later.
   1: (save) => ({ ...save, coins: 100, bets: [], persona: null, ledger: [] }),
+  // v2 → v3 (Sprint 5): factions and elections. The first election opens at the next day's start.
+  2: (save) => {
+    const settings = save.settings as { seed: string };
+    const league = save.league as { teams: { id: string }[] };
+    return { ...save, factions: createFactions(settings.seed, league.teams.map((t) => t.id)), elections: [], news: [] };
+  },
 };
 
 export function migrateSave(raw: unknown): UniverseState {

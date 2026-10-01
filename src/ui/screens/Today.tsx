@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { computeStandings } from '../../engine/season';
 import { gamesOn, isSeasonOver, seasonDays } from '../../world/universe';
+import { ElectionCard } from '../components/ElectionCard';
 import { InstallBanner } from '../components/InstallBanner';
+import { NewsFeed } from './Vote';
 import { ChoosePersona, FanCard, Ledger, OpenBets } from '../components/Wallet';
 import { useGame } from '../store';
 import { GameCard, TimeControls } from './Games';
@@ -44,6 +46,7 @@ export function Today() {
       <InstallBanner ready={u.currentDay > 1} />
       <ChoosePersona />
       <FanCard />
+      <ElectionCard />
 
       {over ? (
         <div className="card callout">
@@ -84,6 +87,13 @@ export function Today() {
               <GameCard key={g.id} game={g} />
             ))}
           </div>
+        </>
+      )}
+
+      {u.news.length > 0 && (
+        <>
+          <h2>Breaking news</h2>
+          <NewsFeed limit={4} />
         </>
       )}
 

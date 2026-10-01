@@ -5,6 +5,7 @@ import { Games } from './screens/Games';
 import { League } from './screens/League';
 import { ComingSoon, Today } from './screens/Today';
 import { Settings } from './screens/Settings';
+import { Vote } from './screens/Vote';
 import { CreateUniverse, Picker } from './screens/Universes';
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
@@ -88,7 +89,7 @@ export function App() {
         {tab === 'today' && <Today />}
         {tab === 'games' && <Games />}
         {tab === 'league' && <League />}
-        {tab === 'vote' && <ComingSoon title="Vote" blurb="Elections, factions and buying votes with the coins you win betting. Arrives in a later sprint." />}
+        {tab === 'vote' && <Vote />}
         {tab === 'settings' && <Settings />}
         {tab === 'history' && <ComingSoon title="History" blurb="Season timeline, notable events, pinned games and the Hall of the Departed. Arrives in a later sprint." />}
       </main>

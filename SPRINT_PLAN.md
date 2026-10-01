@@ -280,4 +280,5 @@ The only thing to watch: make sure `sw.js` / `index.html` aren't cached aggressi
 | 2 | ✅ Done — saves, universes, full season, time controls. Simulation already runs in a Web Worker (pulled forward from Sprint 3). Multi-day sims snapshot once at the end of the command, not every day. |
 | 3 | ✅ Done — cards (procedural art, rarity, flip), team/player pages, search, PWA (offline verified on a production build with the server stopped), persist(), install prompt, Settings, .league export/import. Not yet done: a Lighthouse run and an on-phone install check — do these on the live Netlify URL. |
 | 4 | ✅ Done — coins (start 100, +10/day stipend), public-info odds with 5% house edge, bets lock at game start, settlement, personas (Diehard, Analyst, Gambler live; Prophet/Organizer perks activate in Sprints 5–6), save v1→v2 migration, Today v1. |
-| 5–10 | Not started |
+| 5 | ✅ Done — weekly elections (3 proposals incl. status quo) with real effects on the league, six factions voting a fixed 60-vote budget from public info only, quadratic vote pricing (Organizer −20%), Vote tab, news feed, save v2→v3 migration. Balance: each option wins ~⅓ of elections; median winning margin 17 votes (~300 coins to swing). Played games older than 7 days now show the final score only (their play-by-play can't be replayed after elections change ratings). |
+| 6–10 | Not started |
