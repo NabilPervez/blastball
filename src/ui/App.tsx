@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { CoinBadge } from './components/Wallet';
 import { useGame, type Tab } from './store';
 import { Games } from './screens/Games';
 import { League } from './screens/League';
@@ -41,6 +42,7 @@ function TopBar() {
         <span className="topbar-name">{u.settings.name}</span>
         <span className="muted small">⇄</span>
       </button>
+      <CoinBadge />
       <button className="chip topbar-gear" onClick={() => setTab('settings')} aria-label="Settings">
         ⚙
       </button>

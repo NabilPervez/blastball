@@ -1,12 +1,15 @@
 import { useState } from 'react';
 import type { ScheduledGame } from '../../engine/types';
 import { gamesOn, isSeasonOver, seasonDays, unplayedToday } from '../../world/universe';
+import { formatMult } from '../../engine/odds';
+import { BetPanel } from '../components/BetPanel';
 import { TeamBadge } from '../components/bits';
 import { useGame } from '../store';
 import { GameView } from './GameView';
 
-export function GameCard({ game, children }: { game: ScheduledGame; children?: React.ReactNode }) {
+export function GameCard({ game }: { game: ScheduledGame }) {
   const u = useGame((s) => s.u)!;
+  const [betting, setBetting] = useState(false);
   const watch = useGame((s) => s.watch);
   const away = u.league.teams.find((t) => t.id === game.awayId)!;
   const home = u.league.teams.find((t) => t.id === game.homeId)!;
@@ -31,7 +34,31 @@ export function GameCard({ game, children }: { game: ScheduledGame; children?: R
         {row(home, r?.homeScore)}
         <span className={`gc-status ${!r && today ? 'live' : ''}`}>{status}</span>
       </button>
-      {children}
+      <BetLine game={game} betting={betting} setBetting={setBetting} />
+    </div>
+  );
+}
+
+function BetLine({ game, betting, setBetting }: { game: ScheduledGame; betting: boolean; setBetting(b: boolean): void }) {
+  const u = useGame((s) => s.u)!;
+  const bet = u.bets.find((b) => b.gameId === game.id);
+  const open = game.day === u.currentDay && !u.results[game.id] && !u.started.includes(game.id);
+  const team = bet && u.league.teams.find((t) => t.id === bet.teamId)!;
+  if (betting && open) return <BetPanel game={game} onDone={() => setBetting(false)} />;
+  return (
+    <div className="gc-bet">
+      {bet && team && (
+        <span className={`bet-tag ${bet.status}`}>
+          <i className="coin" aria-hidden="true" /> {bet.amount} on {team.name} @ {formatMult(bet.multMilli)}
+          {bet.status === 'won' && <> · won {bet.payout}</>}
+          {bet.status === 'lost' && <> · lost</>}
+        </span>
+      )}
+      {open && (
+        <button className="chip bet-btn" onClick={() => setBetting(true)} disabled={u.coins < 1}>
+          {bet ? 'Add to bet' : 'Bet'}
+        </button>
+      )}
     </div>
   );
 }

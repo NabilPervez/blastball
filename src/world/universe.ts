@@ -1,15 +1,22 @@
 import { addLines, boxScore, emptyLine, type BoxScore, type StatLine } from '../engine/boxScore';
 import { ENGINE_VERSION, simulateGame } from '../engine/game';
-import { generateSchedule } from '../engine/season';
+import { oddsForGame } from '../engine/odds';
+import { computeStandings, generateSchedule } from '../engine/season';
 import type { GameEvent, League, ScheduledGame } from '../engine/types';
 import { generateLeague } from './generate';
+import { personaMultiplier, winningPayout, type Persona } from './persona';
 
 /**
  * A universe is one save: settings + league + season progress. All changes go through
  * `reduce(state, event)`, so the same events always produce the same state.
  */
 
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
+
+export const STARTING_COINS = 100;
+/** Small daily allowance so a broke fan can always get back in the game. */
+export const DAILY_STIPEND = 10;
+const LEDGER_KEPT = 200;
 
 export type ChaosLevel = 'calm' | 'normal' | 'weird' | 'unhinged';
 export type TimeMode = 'manual' | 'living';
@@ -41,6 +48,25 @@ export interface LogEntry {
   text: string;
 }
 
+export interface Bet {
+  id: string;
+  gameId: string;
+  day: number;
+  teamId: string;
+  amount: number;
+  /** Payout multiplier in thousandths, locked when the bet is placed. */
+  multMilli: number;
+  status: 'open' | 'won' | 'lost';
+  payout: number;
+}
+
+export interface LedgerEntry {
+  season: number;
+  day: number;
+  amount: number;
+  reason: string;
+}
+
 export interface UniverseState {
   saveVersion: number;
   engineVersion: number;
@@ -57,14 +83,21 @@ export interface UniverseState {
   seasonStats: Record<string, StatLine>;
   careerStats: Record<string, StatLine>;
   playerLog: Record<string, LogEntry[]>;
+  coins: number;
+  bets: Bet[];
+  persona: Persona | null;
+  /** Most recent coin movements, newest last. */
+  ledger: LedgerEntry[];
 }
 
 export type WorldEvent =
   | { type: 'gameStarted'; gameId: string }
   | { type: 'gamePlayed'; summary: GameSummary; box: BoxScore }
-  | { type: 'dayEnded'; day: number };
+  | { type: 'dayEnded'; day: number }
+  | { type: 'personaChosen'; persona: Persona }
+  | { type: 'betPlaced'; gameId: string; teamId: string; amount: number };
 
-export function createUniverse(id: string, settings: UniverseSettings, now: number): UniverseState {
+export function createUniverse(id: string, settings: UniverseSettings, now: number, persona: Persona | null = null): UniverseState {
   const league = generateLeague({ seed: settings.seed, name: settings.name, teamCount: settings.leagueSize });
   return {
     saveVersion: SAVE_VERSION,
@@ -81,6 +114,10 @@ export function createUniverse(id: string, settings: UniverseSettings, now: numb
     seasonStats: {},
     careerStats: {},
     playerLog: {},
+    coins: STARTING_COINS,
+    bets: [],
+    persona,
+    ledger: [],
   };
 }
 
@@ -89,15 +126,67 @@ export const isSeasonOver = (s: UniverseState) => s.currentDay > seasonDays(s);
 export const gamesOn = (s: UniverseState, day: number) => s.schedule.filter((g) => g.day === day);
 export const unplayedToday = (s: UniverseState) => gamesOn(s, s.currentDay).filter((g) => !s.results[g.id]);
 
+export function teamRecords(s: UniverseState): Record<string, { wins: number; losses: number }> {
+  return Object.fromEntries(
+    computeStandings(s.league.teams, Object.values(s.results)).map((r) => [r.teamId, { wins: r.wins, losses: r.losses }]),
+  );
+}
+
+/** Odds a bettor sees for a game right now (public info only). */
+export function currentOdds(s: UniverseState, gameId: string) {
+  const game = s.schedule.find((g) => g.id === gameId)!;
+  return oddsForGame(s.league, game, teamRecords(s));
+}
+
+/** The multiplier this player would get backing `teamId` (after persona perks). */
+export function offeredMultiplier(s: UniverseState, gameId: string, teamId: string): number {
+  const game = s.schedule.find((g) => g.id === gameId)!;
+  const odds = currentOdds(s, gameId);
+  const home = teamId === game.homeId;
+  return personaMultiplier(s.persona, home ? odds.homeMult : odds.awayMult, home ? odds.homePm : odds.awayPm);
+}
+
+/** Why a bet can't be placed, or null if it can. Bets lock when a game starts. */
+export function betError(s: UniverseState, gameId: string, teamId: string, amount: number): string | null {
+  const game = s.schedule.find((g) => g.id === gameId);
+  if (!game) return 'No such game.';
+  if (game.day !== s.currentDay) return "You can only bet on today's games.";
+  if (s.results[gameId] || s.started.includes(gameId)) return 'Betting is closed — this game has started.';
+  if (teamId !== game.awayId && teamId !== game.homeId) return "That team isn't playing in this game.";
+  if (!Number.isInteger(amount) || amount < 1) return 'Bet at least 1 coin.';
+  if (amount > s.coins) return 'Not enough coins.';
+  if (s.bets.some((b) => b.gameId === gameId && b.teamId !== teamId)) return 'You already backed the other team in this game.';
+  return null;
+}
+
+const teamName = (s: UniverseState, id: string) => s.league.teams.find((t) => t.id === id)?.name ?? id;
+
+const withLedger = (s: UniverseState, amount: number, reason: string, day = s.currentDay): LedgerEntry[] =>
+  [...s.ledger, { season: s.season, day, amount, reason }].slice(-LEDGER_KEPT);
+
 /** Story-worthy notes for a player's life timeline, from one game's box score. */
 function notesFor(line: StatLine, career: StatLine | undefined): string[] {
   const notes: string[] = [];
-  if (line.hr > 0 && !(career?.hr)) notes.push('Hit their first career home run.');
+  if (line.hr > 0 && !career?.hr) notes.push('Hit their first career home run.');
   if (line.hr >= 2) notes.push(`Hit ${line.hr} home runs in one game.`);
   if (line.h >= 4) notes.push(`Went ${line.h}-for-${line.ab}.`);
   if (line.pk >= 10) notes.push(`Struck out ${line.pk} batters.`);
   if (line.gs && line.w && line.ra === 0 && line.outs >= 27) notes.push('Threw a shutout.');
   return notes;
+}
+
+function settleBets(state: UniverseState, summary: GameSummary): UniverseState {
+  if (!state.bets.some((b) => b.gameId === summary.gameId && b.status === 'open')) return state;
+  const winnerId = summary.homeScore > summary.awayScore ? summary.homeId : summary.awayId;
+  let next = state;
+  const bets = state.bets.map((b): Bet => {
+    if (b.gameId !== summary.gameId || b.status !== 'open') return b;
+    if (b.teamId !== winnerId) return { ...b, status: 'lost', payout: 0 };
+    const payout = winningPayout(state.persona, b.amount, b.multMilli, b.teamId);
+    next = { ...next, coins: next.coins + payout, ledger: withLedger(next, payout, `Bet won: ${teamName(state, b.teamId)}`, summary.day) };
+    return { ...b, status: 'won', payout };
+  });
+  return { ...next, bets };
 }
 
 export function reduce(state: UniverseState, event: WorldEvent): UniverseState {
@@ -118,12 +207,36 @@ export function reduce(state: UniverseState, event: WorldEvent): UniverseState {
         seasonStats[pid] = addLines(seasonStats[pid] ?? emptyLine(), line);
         careerStats[pid] = addLines(careerStats[pid] ?? emptyLine(), line);
       }
-      return { ...state, results: { ...state.results, [summary.gameId]: summary }, seasonStats, careerStats, playerLog };
+      return settleBets({ ...state, results: { ...state.results, [summary.gameId]: summary }, seasonStats, careerStats, playerLog }, summary);
     }
 
     case 'dayEnded':
       if (event.day !== state.currentDay) return state;
-      return { ...state, currentDay: state.currentDay + 1 };
+      return {
+        ...state,
+        currentDay: state.currentDay + 1,
+        coins: state.coins + DAILY_STIPEND,
+        ledger: withLedger(state, DAILY_STIPEND, 'Daily fan stipend'),
+      };
+
+    case 'personaChosen':
+      if (state.persona) return state; // chosen once per universe
+      return { ...state, persona: event.persona };
+
+    case 'betPlaced': {
+      const { gameId, teamId, amount } = event;
+      if (betError(state, gameId, teamId, amount)) return state;
+      const multMilli = offeredMultiplier(state, gameId, teamId);
+      const existing = state.bets.find((b) => b.gameId === gameId && b.teamId === teamId && b.status === 'open');
+      const bets: Bet[] = existing
+        ? state.bets.map((b) =>
+            b === existing
+              ? { ...b, amount: b.amount + amount, multMilli: Math.floor((b.amount * b.multMilli + amount * multMilli) / (b.amount + amount)) }
+              : b,
+          )
+        : [...state.bets, { id: `${state.season}-${gameId}-${teamId}`, gameId, day: state.currentDay, teamId, amount, multMilli, status: 'open', payout: 0 }];
+      return { ...state, coins: state.coins - amount, bets, ledger: withLedger(state, -amount, `Bet on ${teamName(state, teamId)}`) };
+    }
   }
 }
 

@@ -4,6 +4,7 @@ import { App } from './ui/App';
 import { startPwa } from './ui/pwa';
 import './ui/styles.css';
 import './ui/cards.css';
+import './ui/economy.css';
 
 startPwa();
 

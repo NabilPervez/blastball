@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { computeStandings } from '../../engine/season';
 import { gamesOn, isSeasonOver, seasonDays } from '../../world/universe';
 import { InstallBanner } from '../components/InstallBanner';
+import { ChoosePersona, FanCard, Ledger, OpenBets } from '../components/Wallet';
 import { useGame } from '../store';
 import { GameCard, TimeControls } from './Games';
 
@@ -12,6 +13,7 @@ export function Today() {
   const over = isSeasonOver(u);
   const todays = gamesOn(u, u.currentDay);
   const yesterday = gamesOn(u, u.currentDay - 1);
+  const upNext = todays.find((g) => !u.results[g.id]);
   const leader = computeStandings(u.league.teams, Object.values(u.results))[0];
   const leaderTeam = u.league.teams.find((t) => t.id === leader.teamId)!;
 
@@ -40,6 +42,8 @@ export function Today() {
       </header>
 
       <InstallBanner ready={u.currentDay > 1} />
+      <ChoosePersona />
+      <FanCard />
 
       {over ? (
         <div className="card callout">
@@ -53,13 +57,22 @@ export function Today() {
         </div>
       ) : (
         <>
-          <h2>Today's games</h2>
+          {upNext && (
+            <>
+              <h2>Up next</h2>
+              <div className="game-grid">
+                <GameCard game={upNext} />
+              </div>
+            </>
+          )}
+          <h2>{upNext ? 'Rest of today' : "Today's games"}</h2>
           <div className="game-grid">
-            {todays.map((g) => (
+            {todays.filter((g) => g !== upNext).map((g) => (
               <GameCard key={g.id} game={g} />
             ))}
           </div>
           <TimeControls />
+          <OpenBets />
         </>
       )}
 
@@ -73,6 +86,8 @@ export function Today() {
           </div>
         </>
       )}
+
+      <Ledger />
     </section>
   );
 }

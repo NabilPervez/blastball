@@ -3,6 +3,7 @@ import type { GameEvent } from '../engine/types';
 import * as store from '../storage/db';
 import { sim } from '../worker/client';
 import { requestPersistenceOnce } from './pwa';
+import type { Persona } from '../world/persona';
 import { createUniverse, reduce, type Command, type UniverseSettings, type UniverseState, type WorldEvent } from '../world/universe';
 
 export type Tab = 'today' | 'games' | 'league' | 'vote' | 'history' | 'settings';
@@ -26,7 +27,7 @@ interface State {
   init(): Promise<void>;
   showPicker(): Promise<void>;
   showCreate(seed?: string): void;
-  createUniverse(settings: UniverseSettings): Promise<void>;
+  createUniverse(settings: UniverseSettings, persona: Persona): Promise<void>;
   openUniverse(id: string): Promise<void>;
   deleteUniverse(id: string): Promise<void>;
   setTab(tab: Tab): void;
@@ -77,8 +78,8 @@ export const useGame = create<State>((set, get) => ({
 
   showCreate: (seed) => set({ view: 'create', pendingSeed: seed ?? null }),
 
-  createUniverse: async (settings) => {
-    const u = createUniverse(crypto.randomUUID(), settings, Date.now());
+  createUniverse: async (settings, persona) => {
+    const u = createUniverse(crypto.randomUUID(), settings, Date.now(), persona);
     await store.saveUniverse(u);
     await store.setSetting(LAST_UNIVERSE, u.id);
     set({ u, view: 'app', tab: 'today', watchingGameId: null, detail: null });

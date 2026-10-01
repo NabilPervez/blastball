@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { avg, emptyLine, era, inningsPitched, type StatLine } from '../../engine/boxScore';
 import { computeStandings } from '../../engine/season';
 import type { Player } from '../../engine/types';
+import { analystReveal } from '../../world/persona';
 import { rarityOf } from '../../world/rarity';
 import type { UniverseState } from '../../world/universe';
 import { TeamBadge } from '../components/bits';
@@ -9,6 +10,17 @@ import { PlayerCard } from '../components/PlayerCard';
 import { useGame } from '../store';
 
 const teamOf = (u: UniverseState, id: string) => u.league.teams.find((t) => t.id === id)!;
+
+/** The Analyst persona sees one extra hidden rating on each card. */
+function analystExtra(u: UniverseState, player: Player) {
+  if (u.persona?.kind !== 'analyst') return undefined;
+  const r = analystReveal(player);
+  return (
+    <span className="pc-analyst" title="Hidden rating (Analyst perk)">
+      ◎ {r.label} <strong>{r.value}</strong>
+    </span>
+  );
+}
 
 function Standings({ u }: { u: UniverseState }) {
   const showDetail = useGame((s) => s.showDetail);
@@ -91,7 +103,7 @@ function TeamPage({ u, teamId }: { u: UniverseState; teamId: string }) {
   const grid = (ids: string[]) => (
     <div className="card-grid">
       {ids.map((id) => (
-        <PlayerCard key={id} player={u.league.players[id]} team={team} rarity={rarityOf(u, id)} onOpen={() => showDetail({ kind: 'player', id })} />
+        <PlayerCard key={id} player={u.league.players[id]} team={team} rarity={rarityOf(u, id)} extra={analystExtra(u, u.league.players[id])} onOpen={() => showDetail({ kind: 'player', id })} />
       ))}
     </div>
   );
@@ -207,6 +219,7 @@ function PlayerPage({ u, playerId }: { u: UniverseState; playerId: string }) {
           team={team}
           rarity={rarityOf(u, playerId)}
           size="lg"
+          extra={analystExtra(u, player)}
           back={
             <div className="pc-back-body">
               <strong className="display">{player.name}</strong>

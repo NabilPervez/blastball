@@ -1,5 +1,7 @@
-import { useState } from 'react';
-import { newSeed } from '../../world/generate';
+import { useMemo, useState } from 'react';
+import { PersonaPicker, personaReady } from '../components/PersonaPicker';
+import type { Persona } from '../../world/persona';
+import { generateLeague, newSeed } from '../../world/generate';
 import { LEAGUE_SIZES, SEASON_LENGTHS, type ChaosLevel, type UniverseSettings } from '../../world/universe';
 import { useGame } from '../store';
 
@@ -78,6 +80,11 @@ export function CreateUniverse() {
     timeMode: 'manual',
   }));
   const patch = (p: Partial<UniverseSettings>) => setS((prev) => ({ ...prev, ...p }));
+  const [persona, setPersona] = useState<Persona>({ kind: 'diehard', fanName: '', favoriteTeamId: null });
+  // Preview the teams this seed will create, so the player can pick a favorite.
+  const teams = useMemo(() => generateLeague({ seed: s.seed.trim() || 'x', teamCount: s.leagueSize }).teams, [s.seed, s.leagueSize]);
+  const validFavorite = persona.favoriteTeamId && teams.some((t) => t.id === persona.favoriteTeamId) ? persona.favoriteTeamId : null;
+  const finalPersona = { ...persona, favoriteTeamId: validFavorite, fanName: persona.fanName.trim() };
 
   return (
     <main className="solo">
@@ -87,7 +94,8 @@ export function CreateUniverse() {
         className="create-form"
         onSubmit={(e) => {
           e.preventDefault();
-          createUniverse({ ...s, name: s.name.trim() || 'The Blastball League', seed: s.seed.trim() || freshSeed() });
+          if (!personaReady(finalPersona)) return;
+          createUniverse({ ...s, name: s.name.trim() || 'The Blastball League', seed: s.seed.trim() || freshSeed() }, finalPersona);
         }}
       >
         <label>
@@ -99,16 +107,17 @@ export function CreateUniverse() {
           <span className="row">
             <input value={s.seed} maxLength={64} onChange={(e) => patch({ seed: e.target.value })} />
             <button type="button" className="btn" onClick={() => patch({ seed: freshSeed() })}>
-              🎲 Random
+              Random seed
             </button>
           </span>
         </label>
         <Choice label="Teams" value={s.leagueSize} options={LEAGUE_SIZES.map((n) => ({ id: n, label: String(n) }))} onChange={(leagueSize) => patch({ leagueSize })} />
         <Choice label="Season length (games per team)" value={s.seasonLength} options={SEASON_LENGTHS.map((n) => ({ id: n, label: String(n) }))} onChange={(seasonLength) => patch({ seasonLength })} />
         <Choice label="Chaos" value={s.chaos} options={CHAOS} onChange={(chaos) => patch({ chaos })} />
+        <PersonaPicker value={{ ...persona, favoriteTeamId: validFavorite }} onChange={setPersona} teams={teams} />
         <p className="muted small">Chaos takes effect when weirdness arrives (rules, modifiers, the occasional death). Time mode is Manual for now — Living mode arrives later.</p>
         <div className="row">
-          <button className="btn primary" type="submit">
+          <button className="btn primary" type="submit" disabled={!personaReady(finalPersona)}>
             Create universe
           </button>
           {universes.length > 0 && (

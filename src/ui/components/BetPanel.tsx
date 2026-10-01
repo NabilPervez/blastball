@@ -1,0 +1,85 @@
+import { useState } from 'react';
+import { formatMult } from '../../engine/odds';
+import type { ScheduledGame } from '../../engine/types';
+import { betError, currentOdds, offeredMultiplier } from '../../world/universe';
+import { useGame } from '../store';
+import { TeamBadge } from './bits';
+
+/** Inline bet slip for one of today's games. */
+export function BetPanel({ game, onDone }: { game: ScheduledGame; onDone(): void }) {
+  const u = useGame((s) => s.u)!;
+  const dispatch = useGame((s) => s.dispatch);
+  const existing = u.bets.find((b) => b.gameId === game.id);
+  const [teamId, setTeamId] = useState<string>(existing?.teamId ?? game.homeId);
+  const [amount, setAmount] = useState(Math.min(10, u.coins));
+  const odds = currentOdds(u, game.id);
+  const teams = [game.awayId, game.homeId].map((id) => u.league.teams.find((t) => t.id === id)!);
+  const mult = offeredMultiplier(u, game.id, teamId);
+  const error = betError(u, game.id, teamId, amount);
+  const toWin = Math.floor((amount * mult) / 1000);
+
+  return (
+    <form
+      className="bet-panel"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (error) return;
+        dispatch({ type: 'betPlaced', gameId: game.id, teamId, amount }).then(onDone);
+      }}
+    >
+      <div className="bet-sides" role="radiogroup" aria-label="Pick a team">
+        {teams.map((t) => {
+          const pm = t.id === game.homeId ? odds.homePm : odds.awayPm;
+          const locked = !!existing && existing.teamId !== t.id;
+          return (
+            <button
+              type="button"
+              role="radio"
+              aria-checked={teamId === t.id}
+              key={t.id}
+              disabled={locked}
+              className="bet-side"
+              onClick={() => setTeamId(t.id)}
+            >
+              <TeamBadge team={t} size={26} />
+              <span className="bet-team">{t.name}</span>
+              <span className="bet-mult">{formatMult(offeredMultiplier(u, game.id, t.id))}</span>
+              <span className="muted small">{Math.round(pm / 10)}% to win</span>
+            </button>
+          );
+        })}
+      </div>
+      <div className="row">
+        <label className="bet-amount">
+          <span className="sr-only">Coins to bet</span>
+          <input
+            className="field"
+            type="number"
+            inputMode="numeric"
+            min={1}
+            max={u.coins}
+            value={Number.isFinite(amount) ? amount : ''}
+            onChange={(e) => setAmount(Math.trunc(Number(e.target.value)))}
+          />
+        </label>
+        {[10, 25].map((n) => (
+          <button type="button" key={n} className="chip" onClick={() => setAmount(Math.min(n, u.coins))} disabled={u.coins < 1}>
+            {n}
+          </button>
+        ))}
+        <button type="button" className="chip" onClick={() => setAmount(u.coins)} disabled={u.coins < 1}>
+          All in
+        </button>
+      </div>
+      <p className="small">{error ? <span className="neg">{error}</span> : <>Win {toWin} coins (stake included) if they win.</>}</p>
+      <div className="row">
+        <button className="btn primary inline" type="submit" disabled={!!error}>
+          Place bet
+        </button>
+        <button className="btn" type="button" onClick={onDone}>
+          Cancel
+        </button>
+      </div>
+    </form>
+  );
+}

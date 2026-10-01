@@ -15,7 +15,10 @@ type Migration = (save: Record<string, unknown>) => Record<string, unknown>;
  * migrations[n] upgrades a save from version n to n+1. Never edit a shipped migration —
  * add a new one and bump SAVE_VERSION. Each needs a fixture test with a real old save.
  */
-export const migrations: Record<number, Migration> = {};
+export const migrations: Record<number, Migration> = {
+  // v1 → v2 (Sprint 4): coins, betting, fan persona. Old saves get the starting balance and pick a persona later.
+  1: (save) => ({ ...save, coins: 100, bets: [], persona: null, ledger: [] }),
+};
 
 export function migrateSave(raw: unknown): UniverseState {
   if (!raw || typeof raw !== 'object') throw new InvalidSaveError('Save is empty or not an object.');
