@@ -77,7 +77,7 @@ export function FanCard() {
 
 export function OpenBets() {
   const u = useGame((s) => s.u)!;
-  const open = u.bets.filter((b) => b.status === 'open');
+  const open = u.bets.filter((b) => b.status === 'open' && b.season === u.season);
   if (!open.length) return null;
   return (
     <>

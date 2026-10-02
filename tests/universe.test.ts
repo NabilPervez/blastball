@@ -4,7 +4,7 @@ import { computeStandings } from '../src/engine/season';
 import { BlastballDB, deleteUniverse, listUniverses, loadUniverse, persistCommand, saveUniverse } from '../src/storage/db';
 import { migrateSave, NewerSaveError, InvalidSaveError } from '../src/storage/migrate';
 import { snapshotsToPrune, gamesToPrune } from '../src/storage/retention';
-import { createUniverse, reduceAll, runCommand, type UniverseSettings } from '../src/world/universe';
+import { createUniverse, reduceAll, regularResults, runCommand, type UniverseSettings } from '../src/world/universe';
 
 const settings = (p: Partial<UniverseSettings> = {}): UniverseSettings => ({
   name: 'Test League', seed: 'test-seed', leagueSize: 8, seasonLength: 20, chaos: 'normal', timeMode: 'manual', dayLengthMinutes: 60, ...p,
@@ -14,9 +14,9 @@ describe('universe', () => {
   it('a 20-game season simulates end to end and standings match results', () => {
     const u = createUniverse('u1', settings(), 0);
     const { state } = runCommand(u, { type: 'simToSeasonEnd' });
-    expect(state.currentDay).toBe(21);
-    expect(Object.keys(state.results)).toHaveLength(80);
-    const table = computeStandings(state.league.teams, Object.values(state.results));
+    expect(state.phase).toBe('offseason');
+    expect(regularResults(state)).toHaveLength(80);
+    const table = computeStandings(state.league.teams, regularResults(state));
     for (const row of table) expect(row.wins + row.losses).toBe(20);
     // Season stats agree with team runs.
     const teamRuns = Object.values(state.results).reduce((s, r) => s + r.awayScore + r.homeScore, 0);
@@ -43,7 +43,7 @@ describe('universe', () => {
   it('different league sizes and season lengths work', () => {
     for (const leagueSize of [4, 12, 16] as const) {
       const { state } = runCommand(createUniverse('x', settings({ leagueSize, seasonLength: 20 }), 0), { type: 'simToSeasonEnd' });
-      expect(Object.keys(state.results)).toHaveLength((leagueSize / 2) * 20);
+      expect(regularResults(state)).toHaveLength((leagueSize / 2) * 20);
     }
   });
 });

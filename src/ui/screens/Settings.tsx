@@ -19,7 +19,7 @@ export function InstallHelp() {
 
 export function Settings() {
   const u = useGame((s) => s.u)!;
-  const { showPicker, openUniverse, dispatch } = useGame();
+  const { showPicker, openUniverse, dispatch, setTab, showIntro } = useGame();
   const setTime = (timeMode: 'manual' | 'living', dayLengthMinutes: DayLengthMinutes) =>
     dispatch({ type: 'timeSettingsChanged', timeMode, dayLengthMinutes, nowMs: Date.now() });
   const [info, setInfo] = useState<StorageInfo | null>(null);
@@ -159,6 +159,16 @@ export function Settings() {
       <div className="card pad stack">
         <p className="muted small">Installed apps work offline and get stronger storage guarantees (important on iPhone).</p>
         <InstallHelp />
+      </div>
+
+      <h2>Help</h2>
+      <div className="row">
+        <button className="btn" onClick={() => setTab('guide')}>
+          Open the Guide
+        </button>
+        <button className="btn" onClick={showIntro}>
+          Replay the intro
+        </button>
       </div>
 
       <h2>About</h2>

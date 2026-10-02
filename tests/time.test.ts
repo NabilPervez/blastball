@@ -120,11 +120,13 @@ describe('save size', () => {
 });
 
 describe('save fixtures', () => {
-  it('a real v5 save (Sprint 7) loads unchanged and keeps its clock', async () => {
+  it('a real v5 save (Sprint 7) migrates and keeps its clock', async () => {
     const { migrateSave } = await import('../src/storage/migrate');
     const raw = (await import('./fixtures/save-v5.json')).default;
     const u = migrateSave(structuredClone(raw));
-    expect(u).toEqual(raw);
+    expect(u.timeline).toEqual(raw.timeline);
+    expect(u.dayCount).toBe(raw.currentDay);
+    expect(u.phase).toBe('regular');
     expect(u.clock).toEqual({ anchorMs: 1790000000000, anchorDay: 1 });
     expect(planCatchUp(u.clock!, u.settings.dayLengthMinutes, u.currentDay, 20, 1790000000000 + 12 * 30 * 60_000).simulate).toBe(3);
   });

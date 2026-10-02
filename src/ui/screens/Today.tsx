@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { computeStandings } from '../../engine/season';
-import { gamesOn, isSeasonOver, prophecy, seasonDays } from '../../world/universe';
+import { gamesOn, isSeasonOver, prophecy, seasonDays, standingsOf } from '../../world/universe';
 import { ElectionCard } from '../components/ElectionCard';
 import { InstallBanner } from '../components/InstallBanner';
+import { Bracket, PatronPanel, SeasonAwards } from '../components/SeasonBits';
+import { ChecklistCard } from '../components/Onboarding';
 import { BackupReminder, LivingClock, WhileYouWereGone } from '../components/TimeBits';
 import { NewsFeed } from './Vote';
 import { ChoosePersona, FanCard, Ledger, OpenBets } from '../components/Wallet';
@@ -17,7 +18,7 @@ export function Today() {
   const todays = gamesOn(u, u.currentDay);
   const yesterday = gamesOn(u, u.currentDay - 1);
   const upNext = todays.find((g) => !u.results[g.id]);
-  const leader = computeStandings(u.league.teams, Object.values(u.results))[0];
+  const leader = standingsOf(u)[0];
   const leaderTeam = u.league.teams.find((t) => t.id === leader.teamId)!;
 
   const shareLink = `${location.origin}/?seed=${encodeURIComponent(u.settings.seed)}`;
@@ -35,7 +36,9 @@ export function Today() {
     <section>
       <header className="screen-head hero">
         <p className="eyebrow">{u.settings.name}</p>
-        <h1 className="display big">{over ? 'Season complete' : `Day ${u.currentDay}`}</h1>
+        <h1 className="display big">
+          {over ? 'Offseason' : u.phase === 'playoffs' ? `Playoffs · day ${u.currentDay - maxDay}` : `Day ${u.currentDay}`}
+        </h1>
         <p className="muted">
           Season {u.season} · {maxDay} days · seed <code>{u.settings.seed}</code>{' '}
           <button className="link-btn" onClick={copySeed}>
@@ -50,6 +53,7 @@ export function Today() {
       <BackupReminder />
       <ChoosePersona />
       <FanCard />
+      <ChecklistCard />
       <ElectionCard />
       {prophecy(u) && (
         <div className="card pad prophecy" role="note">
@@ -58,16 +62,11 @@ export function Today() {
         </div>
       )}
 
+      {u.phase !== 'regular' && <Bracket />}
+      <SeasonAwards />
+
       {over ? (
-        <div className="card callout">
-          <p className="eyebrow">Champions</p>
-          <p className="display big-ish">
-            {leaderTeam.city} {leaderTeam.name}
-          </p>
-          <p className="muted">
-            {leader.wins}–{leader.losses}. Playoffs and new seasons arrive in a later sprint.
-          </p>
-        </div>
+        <TimeControls />
       ) : (
         <>
           {upNext && (
@@ -89,9 +88,16 @@ export function Today() {
         </>
       )}
 
+      {u.phase === 'regular' && (
+        <p className="muted small">
+          Leading the league: <strong>{leaderTeam.city} {leaderTeam.name}</strong> ({leader.wins}–{leader.losses}). The top {u.league.teams.length > 4 ? 4 : 2} teams reach the playoffs after day {maxDay}.
+        </p>
+      )}
+      <PatronPanel />
+
       {yesterday.length > 0 && (
         <>
-          <h2>{over ? 'Final day' : "Yesterday's results"}</h2>
+          <h2>Yesterday's results</h2>
           <div className="game-grid">
             {yesterday.map((g) => (
               <GameCard key={g.id} game={g} />

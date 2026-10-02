@@ -11,9 +11,10 @@ const FILTERS: { id: TimelineKind | 'all'; label: string }[] = [
   { id: 'return', label: 'Returns' },
   { id: 'weird', label: 'Strange' },
   { id: 'champion', label: 'Champions' },
+  { id: 'retirement', label: 'Retirements' },
 ];
 
-const KIND_MARK: Record<TimelineKind, string> = { election: '✦', death: '✕', return: '◎', weird: '◐', champion: '★' };
+const KIND_MARK: Record<TimelineKind, string> = { election: '✦', death: '✕', return: '◎', weird: '◐', champion: '★', retirement: '◇' };
 
 function Timeline({ u }: { u: UniverseState }) {
   const [filter, setFilter] = useState<TimelineKind | 'all'>('all');
@@ -105,6 +106,53 @@ export function History() {
               </li>
             ))}
           </ul>
+        </>
+      )}
+
+      {u.archive.length > 0 && (
+        <>
+          <h2>Past seasons</h2>
+          <div className="card table-wrap">
+            <table className="stat-table guide-table">
+              <thead>
+                <tr>
+                  <th scope="col">Season</th>
+                  <th scope="col">Cup winner</th>
+                  <th scope="col">Best record</th>
+                  <th scope="col">MVP</th>
+                  <th scope="col">Ace</th>
+                </tr>
+              </thead>
+              <tbody>
+                {u.archive
+                  .slice()
+                  .reverse()
+                  .map((a) => {
+                    const team = (id: string | null) => (id ? u.league.teams.find((t) => t.id === id)?.name ?? '—' : '—');
+                    const best = a.standings[0];
+                    const pl = (id: string | null) =>
+                      id ? (
+                        <button className="link-btn" onClick={() => showDetail({ kind: 'player', id })}>
+                          {u.league.players[id]?.name}
+                        </button>
+                      ) : (
+                        '—'
+                      );
+                    return (
+                      <tr key={a.season}>
+                        <th scope="row">{a.season}</th>
+                        <td>{team(a.championId)}</td>
+                        <td>
+                          {team(best.teamId)} ({best.wins}–{best.losses})
+                        </td>
+                        <td>{pl(a.mvpId)}</td>
+                        <td>{pl(a.aceId)}</td>
+                      </tr>
+                    );
+                  })}
+              </tbody>
+            </table>
+          </div>
         </>
       )}
 

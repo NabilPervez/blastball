@@ -8,6 +8,8 @@ import { applyEffect, marginalCost, openElection, playerVoteTotal, tally, winner
 import { createFactions, type Faction } from './factions';
 import { generateLeague } from './generate';
 import { personaMultiplier, winningPayout, type Persona } from './persona';
+import { advancePlayoffs, initialAge, isPlayoffGame, rookieAge, runOffseason, seasonAwards, startPlayoffs, type Phase, type Playoffs, type SeasonRecord } from './seasons';
+import { createRng } from '../engine/rng';
 import { applyHappening, createStadiums, DEFAULT_PACKS, effectiveLeague, expireMods, mergePacks, resurrect, rollDay, type WeirdHappening, type WeirdState } from './weird';
 
 /** The active rule packs (data-driven weirdness). */
@@ -18,7 +20,12 @@ export const RULES = mergePacks(DEFAULT_PACKS);
  * `reduce(state, event)`, so the same events always produce the same state.
  */
 
-export const SAVE_VERSION = 5;
+export const SAVE_VERSION = 6;
+
+/** Patron tier (PRD §8): unlocked from Season 2. */
+export const PATRON_COST = 150;
+export const PATRON_BLESSING = 3;
+export const PATRON_FROM_SEASON = 2;
 
 export const STARTING_COINS = 100;
 /** Small daily allowance so a broke fan can always get back in the game. */
@@ -41,7 +48,7 @@ export interface UniverseSettings {
   dayLengthMinutes: DayLengthMinutes;
 }
 
-export type TimelineKind = 'election' | 'death' | 'return' | 'weird' | 'champion';
+export type TimelineKind = 'election' | 'death' | 'return' | 'weird' | 'champion' | 'retirement';
 
 /** Notable world events, kept forever (unlike the capped news feed). */
 export interface TimelineEntry {
@@ -77,6 +84,7 @@ export interface Bet {
   multMilli: number;
   status: 'open' | 'won' | 'lost';
   payout: number;
+  season: number;
 }
 
 export interface LedgerEntry {
@@ -119,6 +127,16 @@ export interface UniverseState {
   timeline: TimelineEntry[];
   /** Day the player last exported (or dismissed the backup reminder). */
   lastBackupDay: number;
+  phase: Phase;
+  /** Days elapsed since the universe began (never resets) — the Living clock counts these. */
+  dayCount: number;
+  ages: Record<string, number>;
+  playoffs: Playoffs | null;
+  /** Patron sponsorship for the current season, if any. */
+  patron: { season: number; teamId: string } | null;
+  archive: SeasonRecord[];
+  /** Finished seasons' stat lines: season → player → line. */
+  statsBySeason: Record<number, Record<string, StatLine>>;
 }
 
 export interface NewsItem {
@@ -137,7 +155,8 @@ export type WorldEvent =
   | { type: 'weird'; happening: WeirdHappening }
   | { type: 'timeSettingsChanged'; timeMode: TimeMode; dayLengthMinutes: DayLengthMinutes; nowMs: number }
   | { type: 'clockSet'; clock: Clock }
-  | { type: 'backupNoted'; day: number };
+  | { type: 'backupNoted'; day: number }
+  | { type: 'patronSponsored'; teamId: string };
 
 export function createUniverse(id: string, settings: UniverseSettings, now: number, persona: Persona | null = null): UniverseState {
   const league = generateLeague({ seed: settings.seed, name: settings.name, teamCount: settings.leagueSize });
@@ -167,18 +186,31 @@ export function createUniverse(id: string, settings: UniverseSettings, now: numb
     clock: settings.timeMode === 'living' ? { anchorMs: now, anchorDay: 1 } : null,
     timeline: [],
     lastBackupDay: 1,
+    phase: 'regular',
+    dayCount: 1,
+    ages: Object.fromEntries(Object.keys(league.players).map((id) => [id, initialAge(id)])),
+    playoffs: null,
+    patron: null,
+    archive: [],
+    statsBySeason: {},
   };
   return withNewElection(base, 1);
 }
 
 export const seasonDays = (s: UniverseState) => s.settings.seasonLength;
-export const isSeasonOver = (s: UniverseState) => s.currentDay > seasonDays(s);
+/** The season (regular season + playoffs) is finished and the offseason has begun. */
+export const isSeasonOver = (s: UniverseState) => s.phase === 'offseason';
+/** Regular-season results only (standings ignore the playoffs). */
+export const regularResults = (s: UniverseState) => Object.values(s.results).filter((r) => !isPlayoffGame(r.gameId));
+export const standingsOf = (s: UniverseState) => computeStandings(s.league.teams, regularResults(s));
+export const lastScheduledDay = (s: UniverseState) => s.schedule.reduce((m, g) => Math.max(m, g.day), 0);
+export const betsThisSeason = (s: UniverseState) => s.bets.filter((b) => b.season === s.season);
 export const gamesOn = (s: UniverseState, day: number) => s.schedule.filter((g) => g.day === day);
 export const unplayedToday = (s: UniverseState) => gamesOn(s, s.currentDay).filter((g) => !s.results[g.id]);
 
 export function teamRecords(s: UniverseState): Record<string, { wins: number; losses: number }> {
   return Object.fromEntries(
-    computeStandings(s.league.teams, Object.values(s.results)).map((r) => [r.teamId, { wins: r.wins, losses: r.losses }]),
+    standingsOf(s).map((r) => [r.teamId, { wins: r.wins, losses: r.losses }]),
   );
 }
 
@@ -205,9 +237,35 @@ export function betError(s: UniverseState, gameId: string, teamId: string, amoun
   if (teamId !== game.awayId && teamId !== game.homeId) return "That team isn't playing in this game.";
   if (!Number.isInteger(amount) || amount < 1) return 'Bet at least 1 coin.';
   if (amount > s.coins) return 'Not enough coins.';
-  if (s.bets.some((b) => b.gameId === gameId && b.teamId !== teamId)) return 'You already backed the other team in this game.';
+  if (betsThisSeason(s).some((b) => b.gameId === gameId && b.teamId !== teamId)) return 'You already backed the other team in this game.';
   return null;
 }
+
+/** Why the player can't become this season's Patron, or null if they can. */
+export function patronError(s: UniverseState, teamId: string): string | null {
+  if (s.season < PATRON_FROM_SEASON) return `Patrons unlock in Season ${PATRON_FROM_SEASON}.`;
+  if (s.phase === 'offseason') return 'Sponsorships open when the new season starts.';
+  if (s.patron?.season === s.season) return 'You already sponsor a team this season.';
+  if (!s.league.teams.some((t) => t.id === teamId)) return 'No such team.';
+  if (s.coins < PATRON_COST) return `Sponsoring costs ${PATRON_COST} coins.`;
+  return null;
+}
+
+/** Apply the Patron's blessing to a game's league view. */
+function withPatron(s: UniverseState, league: League, game: ScheduledGame): League {
+  const p = s.patron;
+  if (!p || p.season !== s.season || (game.awayId !== p.teamId && game.homeId !== p.teamId)) return league;
+  const team = league.teams.find((t) => t.id === p.teamId)!;
+  const players = { ...league.players };
+  for (const id of [...team.lineup, ...team.rotation]) {
+    const ratings = { ...players[id].ratings };
+    for (const k of Object.keys(ratings) as (keyof typeof ratings)[]) ratings[k] = Math.min(100, ratings[k] + PATRON_BLESSING);
+    players[id] = { ...players[id], ratings };
+  }
+  return { ...league, players };
+}
+
+export const gameLeague = (s: UniverseState, game: ScheduledGame) => withPatron(s, effectiveLeague(s.league, s.weird, game, s.season, RULES), game);
 
 const teamName = (s: UniverseState, id: string) => s.league.teams.find((t) => t.id === id)?.name ?? id;
 
@@ -227,7 +285,7 @@ export const currentElection = (s: UniverseState): Election | null => {
 };
 
 const publicStandings = (s: UniverseState) =>
-  computeStandings(s.league.teams, Object.values(s.results)).map((r) => ({ teamId: r.teamId, wins: r.wins, losses: r.losses }));
+  standingsOf(s).map((r) => ({ teamId: r.teamId, wins: r.wins, losses: r.losses }));
 
 /** Open the next weekly election starting on `openedDay` (no-op past the end of the season). */
 export function withNewElection(s: UniverseState, openedDay: number): UniverseState {
@@ -352,9 +410,11 @@ export function reduce(state: UniverseState, event: WorldEvent): UniverseState {
     case 'dayEnded':
     {
       if (event.day !== state.currentDay) return state;
+      if (state.phase === 'offseason') return newSeason(state);
       let next: UniverseState = {
         ...state,
         currentDay: state.currentDay + 1,
+        dayCount: state.dayCount + 1,
         coins: state.coins + DAILY_STIPEND,
         ledger: withLedger(state, DAILY_STIPEND, 'Daily fan stipend'),
         weird: expireMods(state.weird, state.season, state.currentDay + 1),
@@ -366,18 +426,15 @@ export function reduce(state: UniverseState, event: WorldEvent): UniverseState {
       } else if (!open) {
         next = withNewElection(next, event.day + 1); // e.g. saves from before elections existed
       }
-      if (isSeasonOver(next) && !isSeasonOver(state)) {
-        const top = computeStandings(next.league.teams, Object.values(next.results))[0];
-        const t = next.league.teams.find((x) => x.id === top.teamId)!;
-        next = { ...next, timeline: withTimeline(next, 'champion', `The ${t.city} ${t.name} win Season ${next.season} at ${top.wins}–${top.losses}.`, event.day) };
-      }
+      if (state.phase === 'regular' && next.currentDay > seasonDays(next)) next = beginPlayoffs(next, event.day);
+      else if (state.phase === 'playoffs') next = continuePlayoffs(next, event.day);
       return next;
     }
 
     case 'timeSettingsChanged': {
       const settings = { ...state.settings, timeMode: event.timeMode, dayLengthMinutes: event.dayLengthMinutes };
       // Switching modes or day length restarts the clock from now.
-      const clock = event.timeMode === 'living' ? { anchorMs: event.nowMs, anchorDay: state.currentDay } : null;
+      const clock = event.timeMode === 'living' ? { anchorMs: event.nowMs, anchorDay: state.dayCount } : null;
       return { ...state, settings, clock };
     }
 
@@ -386,6 +443,19 @@ export function reduce(state: UniverseState, event: WorldEvent): UniverseState {
 
     case 'backupNoted':
       return { ...state, lastBackupDay: Math.max(state.lastBackupDay, event.day) };
+
+    case 'patronSponsored': {
+      if (patronError(state, event.teamId)) return state;
+      const t = state.league.teams.find((x) => x.id === event.teamId)!;
+      const fan = state.persona?.fanName || 'A generous fan';
+      return {
+        ...state,
+        coins: state.coins - PATRON_COST,
+        patron: { season: state.season, teamId: event.teamId },
+        ledger: withLedger(state, -PATRON_COST, `Patron of the ${t.name}`),
+        news: withNews(state, [`${fan} becomes Patron of the ${t.city} ${t.name}. The players feel blessed (+${PATRON_BLESSING} to everything this season).`]),
+      };
+    }
 
     case 'weird': {
       const h = event.happening;
@@ -401,7 +471,9 @@ export function reduce(state: UniverseState, event: WorldEvent): UniverseState {
         }
       }
       const kind: TimelineKind = h.eventId === 'death' ? 'death' : 'weird';
-      return { ...state, league, weird, playerLog, news: withNews(state, [h.text]), timeline: withTimeline(state, kind, h.text) };
+      const ages = { ...state.ages };
+      for (const c of h.changes) if (c.kind === 'death') ages[c.replacement.id] = rookieAge(c.replacement.id);
+      return { ...state, league, weird, ages, playerLog, news: withNews(state, [h.text]), timeline: withTimeline(state, kind, h.text) };
     }
 
     case 'votesBought': {
@@ -430,14 +502,14 @@ export function reduce(state: UniverseState, event: WorldEvent): UniverseState {
       const { gameId, teamId, amount } = event;
       if (betError(state, gameId, teamId, amount)) return state;
       const multMilli = offeredMultiplier(state, gameId, teamId);
-      const existing = state.bets.find((b) => b.gameId === gameId && b.teamId === teamId && b.status === 'open');
+      const existing = betsThisSeason(state).find((b) => b.gameId === gameId && b.teamId === teamId && b.status === 'open');
       const bets: Bet[] = existing
         ? state.bets.map((b) =>
             b === existing
               ? { ...b, amount: b.amount + amount, multMilli: Math.floor((b.amount * b.multMilli + amount * multMilli) / (b.amount + amount)) }
               : b,
           )
-        : [...state.bets, { id: `${state.season}-${gameId}-${teamId}`, gameId, day: state.currentDay, teamId, amount, multMilli, status: 'open', payout: 0 }];
+        : [...state.bets, { id: `${state.season}-${gameId}-${teamId}`, gameId, day: state.currentDay, teamId, amount, multMilli, status: 'open', payout: 0, season: state.season }];
       return { ...state, coins: state.coins - amount, bets, ledger: withLedger(state, -amount, `Bet on ${teamName(state, teamId)}`) };
     }
   }
@@ -484,7 +556,7 @@ export function runCommand(start: UniverseState, cmd: Command): CommandResult {
 
   const play = (game: ScheduledGame) => {
     if (state.results[game.id]) return;
-    const result = simulateGame(effectiveLeague(state.league, state.weird, game, state.season, RULES), game, state.season);
+    const result = simulateGame(gameLeague(state, game), game, state.season);
     apply({
       type: 'gamePlayed',
       summary: {
@@ -502,9 +574,10 @@ export function runCommand(start: UniverseState, cmd: Command): CommandResult {
   };
 
   const endDay = () => {
-    if (isSeasonOver(state)) return;
-    unplayedToday(state).forEach(play);
-    for (const happening of rollDay(rollInput(state), RULES)) apply({ type: 'weird', happening });
+    if (state.phase !== 'offseason') {
+      unplayedToday(state).forEach(play);
+      for (const happening of rollDay(rollInput(state), RULES)) apply({ type: 'weird', happening });
+    }
     apply({ type: 'dayEnded', day: state.currentDay });
   };
 
@@ -525,10 +598,11 @@ export function runCommand(start: UniverseState, cmd: Command): CommandResult {
       endDay();
       break;
     case 'simDays':
-      for (let i = 0; i < cmd.count && !isSeasonOver(state); i++) endDay();
+      for (let i = 0; i < cmd.count; i++) endDay();
       break;
     case 'simToSeasonEnd':
-      while (!isSeasonOver(state)) endDay();
+      // Through the regular season and the playoffs, stopping at the offseason.
+      for (let guard = 0; state.phase !== 'offseason' && guard < 1000; guard++) endDay();
       break;
   }
 
@@ -539,7 +613,7 @@ export function runCommand(start: UniverseState, cmd: Command): CommandResult {
 /** Recreate a game's play-by-play from its seed (works for any game, since the sim is deterministic). */
 export function replayGame(state: UniverseState, gameId: string): GameEvent[] {
   const game = state.schedule.find((g) => g.id === gameId)!;
-  return simulateGame(effectiveLeague(state.league, state.weird, game, state.season, RULES), game, state.season).events;
+  return simulateGame(gameLeague(state, game), game, state.season).events;
 }
 
 const rollInput = (s: UniverseState) => ({
@@ -565,4 +639,109 @@ export function prophecy(s: UniverseState): string | null {
         : `Something strange is gathering around the ${t.city} ${t.name} tonight.`;
     })
     .join(' ');
+}
+
+// ---------------------------------------------------------------------------
+// Playoffs and new seasons.
+
+const teamLabel = (s: UniverseState, id: string) => {
+  const t = s.league.teams.find((x) => x.id === id)!;
+  return `${t.city} ${t.name}`;
+};
+
+function beginPlayoffs(s: UniverseState, lastRegularDay: number): UniverseState {
+  const table = standingsOf(s);
+  const top = table[0];
+  const { playoffs, games } = startPlayoffs(table.map((r) => r.teamId), s.currentDay);
+  const seeds = playoffs.series.flatMap((x) => [x.highSeed, x.lowSeed]).map((id) => s.league.teams.find((t) => t.id === id)!.name);
+  return {
+    ...s,
+    phase: 'playoffs',
+    playoffs,
+    schedule: [...s.schedule, ...games],
+    news: withNews(s, [`The regular season is over. The ${teamLabel(s, top.teamId)} finish first at ${top.wins}–${top.losses}.`, `Playoffs begin: ${seeds.join(', ')}.`], lastRegularDay),
+  };
+}
+
+function continuePlayoffs(s: UniverseState, dayEnded: number): UniverseState {
+  const winner = (gameId: string) => {
+    const r = s.results[gameId];
+    return r ? (r.homeScore > r.awayScore ? r.homeId : r.awayId) : null;
+  };
+  const before = s.playoffs!;
+  const { playoffs, games } = advancePlayoffs(before, winner, s.currentDay);
+  let next: UniverseState = { ...s, playoffs, schedule: [...s.schedule, ...games] };
+  const news: string[] = [];
+  for (const series of playoffs.series) {
+    const was = before.series.find((x) => x.id === series.id);
+    if (series.winner && !was?.winner) {
+      const loser = series.winner === series.highSeed ? series.lowSeed : series.highSeed;
+      news.push(`The ${teamLabel(s, series.winner)} beat the ${teamLabel(s, loser)} ${series.wins[series.winner]}–${series.wins[loser]}.`);
+    }
+  }
+  if (playoffs.championId) {
+    const { mvpId, aceId } = seasonAwards(next.seasonStats, next.league);
+    const champ = teamLabel(next, playoffs.championId);
+    const playerLog = { ...next.playerLog };
+    const note = (id: string | null, text: string) => id && (playerLog[id] = [...(playerLog[id] ?? []), { season: next.season, day: dayEnded, text }]);
+    note(mvpId, `Named Season ${next.season} MVP.`);
+    note(aceId, `Named Season ${next.season} Ace (best pitcher).`);
+    const awards = [mvpId && `MVP: ${next.league.players[mvpId].name}`, aceId && `Ace: ${next.league.players[aceId].name}`].filter(Boolean).join(' · ');
+    news.push(`The ${champ} win the Blastball Cup!`, awards);
+    next = {
+      ...next,
+      phase: 'offseason',
+      playerLog,
+      archive: [...next.archive, { season: next.season, standings: standingsOf(next).map((r) => ({ teamId: r.teamId, wins: r.wins, losses: r.losses })), championId: playoffs.championId, mvpId, aceId }],
+      timeline: withTimeline(next, 'champion', `The ${champ} win the Season ${next.season} Blastball Cup. ${awards}.`, dayEnded),
+    };
+  }
+  return news.length ? { ...next, news: withNews(next, news.filter(Boolean), dayEnded) } : next;
+}
+
+/** The offseason ends: everyone ages, veterans retire, rookies arrive and Season N+1 begins. */
+function newSeason(s: UniverseState): UniverseState {
+  const season = s.season + 1;
+  const off = runOffseason(s.league, s.ages, s.settings.seed, season);
+  const playerLog = { ...s.playerLog };
+  for (const n of off.notes) playerLog[n.playerId] = [...(playerLog[n.playerId] ?? []), { season, day: 1, text: n.text }];
+  const playerStatus = { ...s.weird.playerStatus };
+  for (const r of off.retired) playerStatus[r.playerId] = 'retired';
+
+  // A fresh schedule: same league, new order of opponents each season.
+  const order = [...off.league.teams];
+  const rng = createRng(s.settings.seed, season, 'schedule');
+  for (let i = order.length - 1; i > 0; i--) {
+    const j = rng.int(i + 1);
+    [order[i], order[j]] = [order[j], order[i]];
+  }
+  const notable = off.retired.filter((r) => (s.playerLog[r.playerId]?.length ?? 0) >= 3);
+  const retireNews = off.retired.length ? [`${off.retired.length} player${off.retired.length === 1 ? '' : 's'} retired this offseason; rookies take their places.`] : [];
+
+  let next: UniverseState = {
+    ...s,
+    season,
+    phase: 'regular',
+    currentDay: 1,
+    dayCount: s.dayCount + 1,
+    league: off.league,
+    ages: off.ages,
+    schedule: generateSchedule(order, s.settings.seasonLength),
+    results: {},
+    started: [],
+    playoffs: null,
+    patron: null,
+    seasonStats: {},
+    statsBySeason: { ...s.statsBySeason, [s.season]: s.seasonStats },
+    playerLog,
+    coins: s.coins + DAILY_STIPEND,
+    weird: { ...expireMods(s.weird, season, 1), playerStatus },
+    news: withNews({ ...s, season }, [`Season ${season} begins!`, ...retireNews], 1),
+    timeline: [
+      ...s.timeline,
+      ...notable.map((r) => ({ season, day: 1, kind: 'retirement' as const, text: `${s.league.players[r.playerId].name} retired at ${r.age}.` })),
+    ],
+  };
+  next = withNewElection(next, 1);
+  return next;
 }

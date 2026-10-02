@@ -6,10 +6,10 @@ import { requestPersistenceOnce } from './pwa';
 import { planCatchUp } from '../world/clock';
 import { buildDigest, type Digest } from '../world/digest';
 import type { Persona } from '../world/persona';
-import { createUniverse, reduce, seasonDays, type Command, type UniverseSettings, type UniverseState, type WorldEvent } from '../world/universe';
+import { createUniverse, reduce, type Command, type UniverseSettings, type UniverseState, type WorldEvent } from '../world/universe';
 
-export type Tab = 'today' | 'games' | 'league' | 'vote' | 'history' | 'settings';
-export type View = 'loading' | 'picker' | 'create' | 'app';
+export type Tab = 'today' | 'games' | 'league' | 'vote' | 'history' | 'settings' | 'guide';
+export type View = 'loading' | 'picker' | 'create' | 'app' | 'intro';
 
 const LAST_UNIVERSE = 'lastUniverseId';
 
@@ -36,6 +36,9 @@ interface State {
   init(): Promise<void>;
   showPicker(): Promise<void>;
   showCreate(seed?: string): void;
+  /** Replay the onboarding intro; afterwards return to the app (or create a league). */
+  showIntro(): void;
+  finishIntro(): void;
   createUniverse(settings: UniverseSettings, persona: Persona): Promise<void>;
   openUniverse(id: string): Promise<void>;
   deleteUniverse(id: string): Promise<void>;
@@ -74,6 +77,11 @@ export const useGame = create<State>((set, get) => ({
         get().showCreate(seed);
         return;
       }
+      // First visit ever: show the intro before anything else.
+      if (!(await store.getSetting<boolean>('onboarded')) && (await store.listUniverses()).length === 0) {
+        set({ view: 'intro' });
+        return;
+      }
       const last = await store.getSetting<string>(LAST_UNIVERSE);
       const u = last ? await store.loadUniverse(last) : null;
       if (u) {
@@ -92,6 +100,8 @@ export const useGame = create<State>((set, get) => ({
   },
 
   showCreate: (seed) => set({ view: 'create', pendingSeed: seed ?? null }),
+  showIntro: () => set({ view: 'intro' }),
+  finishIntro: () => set({ view: get().u ? 'app' : 'create' }),
 
   createUniverse: async (settings, persona) => {
     const u = createUniverse(crypto.randomUUID(), settings, Date.now(), persona);
@@ -130,8 +140,8 @@ export const useGame = create<State>((set, get) => ({
       await store.persistCommand(u, result);
       let next = result.state;
       // In Living mode, advancing by hand restarts the clock from the new day.
-      if (next.clock && next.currentDay !== u.currentDay) {
-        const ev = { type: 'clockSet' as const, clock: { anchorMs: Date.now(), anchorDay: next.currentDay } };
+      if (next.clock && next.dayCount !== u.dayCount) {
+        const ev = { type: 'clockSet' as const, clock: { anchorMs: Date.now(), anchorDay: next.dayCount } };
         next = reduce(next, ev);
         await store.appendEvent(next, ev);
       }
@@ -176,7 +186,7 @@ export const useGame = create<State>((set, get) => ({
   catchUp: async () => {
     const start = get().u;
     if (!start?.clock || get().busy || get().catchingUp) return;
-    const plan = planCatchUp(start.clock, start.settings.dayLengthMinutes, start.currentDay, Math.max(0, seasonDays(start) - start.currentDay + 1), Date.now());
+    const plan = planCatchUp(start.clock, start.settings.dayLengthMinutes, start.dayCount, Number.POSITIVE_INFINITY, Date.now());
     if (!plan.simulate && !plan.skipped) return;
     set({ busy: true, catchingUp: plan.simulate ? { done: 0, total: plan.simulate } : null });
     try {
@@ -189,7 +199,7 @@ export const useGame = create<State>((set, get) => ({
         u = result.state;
         set({ u, catchingUp: { done: i + 1, total: plan.simulate } });
       }
-      const clockEvent = { type: 'clockSet' as const, clock: plan.nextClock(u.currentDay) };
+      const clockEvent = { type: 'clockSet' as const, clock: plan.nextClock(u.dayCount) };
       u = reduce(u, clockEvent);
       await store.appendEvent(u, clockEvent);
       set({ u, digest: plan.simulate ? buildDigest(start, u, events, plan.skipped) : get().digest });

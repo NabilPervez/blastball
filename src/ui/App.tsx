@@ -8,6 +8,8 @@ import { Settings } from './screens/Settings';
 import { Vote } from './screens/Vote';
 import { History } from './screens/History';
 import { CatchUpOverlay } from './components/TimeBits';
+import { Onboarding } from './components/Onboarding';
+import { Guide } from './screens/Guide';
 import { CreateUniverse, Picker } from './screens/Universes';
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
@@ -18,7 +20,10 @@ const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'history', label: 'History', icon: '⧗' },
 ];
 
-const SIDEBAR_ONLY: { id: Tab; label: string; icon: string }[] = [{ id: 'settings', label: 'Settings', icon: '⚙' }];
+const SIDEBAR_ONLY: { id: Tab; label: string; icon: string }[] = [
+  { id: 'guide', label: 'Guide', icon: '?' },
+  { id: 'settings', label: 'Settings', icon: '⚙' },
+];
 
 function ErrorBanner() {
   const { error, clearError } = useGame();
@@ -46,6 +51,9 @@ function TopBar() {
         <span className="muted small">⇄</span>
       </button>
       <CoinBadge />
+      <button className="chip topbar-help topbar-gear" onClick={() => setTab('guide')} aria-label="Guide">
+        ?
+      </button>
       <button className="chip topbar-gear" onClick={() => setTab('settings')} aria-label="Settings">
         ⚙
       </button>
@@ -54,7 +62,7 @@ function TopBar() {
 }
 
 export function App() {
-  const { view, tab, setTab, init, catchUp } = useGame();
+  const { view, tab, setTab, init, catchUp, finishIntro } = useGame();
 
   useEffect(() => {
     init();
@@ -81,6 +89,7 @@ export function App() {
       </>
     );
   if (view === 'create') return <CreateUniverse />;
+  if (view === 'intro') return <Onboarding onDone={finishIntro} />;
 
   return (
     <div className="app">
@@ -91,7 +100,7 @@ export function App() {
           BLAST<span>BALL</span>
         </div>
         {[...TABS, ...SIDEBAR_ONLY].map((t) => (
-          <button key={t.id} className={`nav-item ${tab === t.id ? 'active' : ''} ${t.id === 'settings' ? 'sidebar-only' : ''}`} aria-current={tab === t.id ? 'page' : undefined} onClick={() => setTab(t.id)}>
+          <button key={t.id} className={`nav-item ${tab === t.id ? 'active' : ''} ${SIDEBAR_ONLY.includes(t) ? 'sidebar-only' : ''}`} aria-current={tab === t.id ? 'page' : undefined} onClick={() => setTab(t.id)}>
             <span className="nav-icon" aria-hidden="true">
               {t.icon}
             </span>
@@ -106,6 +115,7 @@ export function App() {
         {tab === 'league' && <League />}
         {tab === 'vote' && <Vote />}
         {tab === 'settings' && <Settings />}
+        {tab === 'guide' && <Guide />}
         {tab === 'history' && <History />}
       </main>
     </div>

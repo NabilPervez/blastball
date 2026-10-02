@@ -1,4 +1,5 @@
 import { createFactions } from '../world/factions';
+import { initialAge } from '../world/seasons';
 import { createStadiums } from '../world/weird';
 import { SAVE_VERSION, type UniverseState } from '../world/universe';
 
@@ -50,6 +51,24 @@ export const migrations: Record<number, Migration> = {
       clock: null,
       timeline,
       lastBackupDay: save.currentDay,
+    };
+  },
+  // v5 → v6 (Sprint 8): playoffs, multiple seasons, aging, Patron. A finished season goes
+  // straight to the offseason (its playoffs were never played) and rolls into Season 2.
+  5: (save) => {
+    const players = (save.league as { players: Record<string, unknown> }).players;
+    const settings = save.settings as { seasonLength: number };
+    const currentDay = save.currentDay as number;
+    return {
+      ...save,
+      phase: currentDay > settings.seasonLength ? 'offseason' : 'regular',
+      dayCount: currentDay,
+      ages: Object.fromEntries(Object.keys(players).map((id) => [id, initialAge(id)])),
+      playoffs: null,
+      patron: null,
+      archive: [],
+      statsBySeason: {},
+      bets: (save.bets as object[]).map((b) => ({ ...b, season: 1 })),
     };
   },
 };

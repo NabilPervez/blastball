@@ -1,0 +1,51 @@
+/* Sprint 8: playoffs, awards, Patron, onboarding, guide */
+.bracket { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+.series { padding: 12px 14px; display: grid; gap: 6px; }
+.series p { margin: 0; }
+.series-team { display: flex; align-items: center; gap: 8px; }
+.series-team .series-name { flex: 1; font-family: var(--display); text-transform: uppercase; }
+.series-team strong { font-family: var(--display); font-size: 1.3rem; }
+.series-team.won strong { color: var(--secondary); }
+.series-team.lost { opacity: 0.5; }
+.callout.champion { border-color: var(--secondary); background: linear-gradient(135deg, rgba(255, 201, 60, 0.12), transparent 60%), var(--surface); margin-bottom: 12px; }
+.awards { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+.award { display: grid; gap: 2px; padding: 14px; text-align: left; border-color: var(--secondary); }
+.award strong { font-size: 1.3rem; }
+.patron { margin: 16px 0; border-color: var(--secondary); }
+.patron.locked { border-color: var(--line); }
+.patron select { flex: 1; min-width: 0; }
+.gc-status .pill { margin-right: 4px; }
+
+.onboarding { min-height: 100dvh; display: flex; flex-direction: column; justify-content: center; gap: 6px; }
+.ob-progress { display: flex; gap: 6px; margin-bottom: 24px; }
+.ob-progress span { flex: 1; height: 4px; border-radius: 4px; background: var(--line); }
+.ob-progress span.on { background: var(--primary); }
+.ob-body { font-size: 1.1rem; line-height: 1.6; margin: 8px 0; }
+.ob-actions { margin-top: 20px; }
+.ob-actions .btn.primary { margin: 0; }
+
+.checklist { margin: 12px 0; border-color: var(--accent); }
+.checklist-items { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.checklist-items li { display: flex; align-items: center; gap: 10px; min-height: 40px; }
+.checklist-items li.done { color: var(--muted); text-decoration: line-through; }
+.check-mark { width: 22px; height: 22px; flex: none; border-radius: 50%; border: 2px solid var(--line); display: grid; place-items: center; font-size: 0.8rem; }
+.checklist-items li.done .check-mark { background: var(--good); border-color: var(--good); color: #062a1a; }
+
+.guide { display: grid; gap: 14px; }
+.guide > p { margin: 0; }
+.guide-toc ol { margin: 0; padding-left: 1.2em; columns: 2; column-gap: 24px; }
+@media (min-width: 700px) { .guide-toc ol { columns: 3; } }
+.guide-toc a { color: var(--accent); line-height: 2; }
+.guide-section { scroll-margin-top: 16px; }
+.guide-section p { margin: 0 0 10px; line-height: 1.6; }
+.guide-h { color: var(--text); margin: 0 0 10px; font-size: 1.4rem; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.guide-list { margin: 0 0 10px; padding-left: 1.2em; display: grid; gap: 6px; line-height: 1.55; }
+.guide-list .perk { color: var(--secondary); }
+.guide-steps { margin: 0 0 10px; padding-left: 1.3em; display: grid; gap: 4px; }
+.guide-table th, .guide-table td { text-align: left; }
+.guide-faq dt { font-weight: 600; margin-top: 10px; }
+.guide-faq dd { margin: 4px 0 0; color: var(--muted); }
+.topbar-help { margin-left: 0; }
+@media (min-width: 900px) { .topbar-help { display: none; } }
+.topbar-help + .topbar-gear { margin-left: 0; }
+.guide > * { min-width: 0; }

@@ -159,7 +159,7 @@ describe('save fixtures', () => {
     const raw = (await import('./fixtures/save-v2.json')).default;
     const u = migrateSave(structuredClone(raw));
     expect(u.coins).toBe(raw.coins);
-    expect(u.bets).toEqual(raw.bets);
+    expect(u.bets.map((b) => ({ ...b, season: undefined }))).toEqual(raw.bets.map((b) => ({ ...b, season: undefined })));
     expect(u.factions).toHaveLength(6);
     expect(u.elections).toEqual([]);
     expect(u.persona?.kind).toBe('gambler');

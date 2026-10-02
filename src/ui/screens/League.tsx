@@ -1,18 +1,78 @@
 import { useState } from 'react';
 import { avg, emptyLine, era, inningsPitched, type StatLine } from '../../engine/boxScore';
-import { computeStandings } from '../../engine/season';
 import type { Player } from '../../engine/types';
 import { analystReveal } from '../../world/persona';
 import { rarityOf } from '../../world/rarity';
-import type { UniverseState } from '../../world/universe';
+import { standingsOf, type UniverseState } from '../../world/universe';
 import { TeamBadge } from '../components/bits';
 import { PlayerCard } from '../components/PlayerCard';
 import { ModList, playerModsOf, stadiumModsOf } from '../components/Mods';
+import { PatronPanel } from '../components/SeasonBits';
 import { useGame } from '../store';
 
 const teamOf = (u: UniverseState, id: string) => u.league.teams.find((t) => t.id === id)!;
 
-const STATUS_LABEL: Record<string, string> = { active: 'Active', departed: 'Departed', returned: 'Returned', reserve: 'Reserve' };
+const STATUS_LABEL: Record<string, string> = { active: 'Active', departed: 'Departed', returned: 'Returned', reserve: 'Reserve', retired: 'Retired' };
+
+/** One row per finished season the player appeared in. */
+function SeasonByseason({ u, player }: { u: UniverseState; player: Player }) {
+  const seasons = Object.entries(u.statsBySeason)
+    .map(([season, lines]) => [Number(season), lines[player.id]] as const)
+    .filter(([, line]) => line && line.g > 0);
+  if (!seasons.length) return null;
+  const pitcher = player.role === 'pitcher';
+  return (
+    <>
+      <h2>By season</h2>
+      <div className="card table-wrap">
+        <table className="stat-table">
+          <thead>
+            <tr>
+              <th scope="col">Season</th>
+              {pitcher ? (
+                <>
+                  <th scope="col">W-L</th>
+                  <th scope="col">ERA</th>
+                  <th scope="col">K</th>
+                </>
+              ) : (
+                <>
+                  <th scope="col">G</th>
+                  <th scope="col">AVG</th>
+                  <th scope="col">HR</th>
+                  <th scope="col">R</th>
+                </>
+              )}
+            </tr>
+          </thead>
+          <tbody>
+            {seasons.map(([season, s]) => (
+              <tr key={season}>
+                <th scope="row">{season}</th>
+                {pitcher ? (
+                  <>
+                    <td>
+                      {s.w}-{s.l}
+                    </td>
+                    <td>{era(s)}</td>
+                    <td>{s.pk}</td>
+                  </>
+                ) : (
+                  <>
+                    <td>{s.g}</td>
+                    <td>{avg(s)}</td>
+                    <td>{s.hr}</td>
+                    <td>{s.r}</td>
+                  </>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
 
 function HallOfTheDeparted({ u }: { u: UniverseState }) {
   const showDetail = useGame((s) => s.showDetail);
@@ -54,7 +114,7 @@ function analystExtra(u: UniverseState, player: Player) {
 
 function Standings({ u }: { u: UniverseState }) {
   const showDetail = useGame((s) => s.showDetail);
-  const table = computeStandings(u.league.teams, Object.values(u.results));
+  const table = standingsOf(u);
   return (
     <div className="card table-wrap">
       <table className="standings">
@@ -129,7 +189,7 @@ function Search({ u }: { u: UniverseState }) {
 function TeamPage({ u, teamId }: { u: UniverseState; teamId: string }) {
   const showDetail = useGame((s) => s.showDetail);
   const team = teamOf(u, teamId);
-  const row = computeStandings(u.league.teams, Object.values(u.results)).find((r) => r.teamId === teamId)!;
+  const row = standingsOf(u).find((r) => r.teamId === teamId)!;
   const reserves = Object.entries(u.weird.playerStatus)
     .filter(([id, st]) => st === 'reserve' && u.league.players[id].teamId === teamId)
     .map(([id]) => id);
@@ -155,6 +215,7 @@ function TeamPage({ u, teamId }: { u: UniverseState; teamId: string }) {
           </p>
         </div>
       </header>
+      <PatronPanel teamId={teamId} />
       <h2>Lineup</h2>
       {grid(team.lineup)}
       <h2>Rotation</h2>
@@ -279,6 +340,7 @@ function PlayerPage({ u, playerId }: { u: UniverseState; playerId: string }) {
           <h1 className="display">{player.name}</h1>
           <p className="muted">
             {player.position} · {team.city} {team.name} · {STATUS_LABEL[u.weird.playerStatus[playerId] ?? 'active']}
+            {u.ages[playerId] !== undefined && ` · age ${u.ages[playerId]}`}
           </p>
           {departure && (
             <p className="departed-note">
@@ -291,6 +353,7 @@ function PlayerPage({ u, playerId }: { u: UniverseState; playerId: string }) {
           <div className="card table-wrap">
             <StatTable player={player} season={season} career={career} />
           </div>
+          <SeasonByseason u={u} player={player} />
           <h2>Life timeline</h2>
           <Timeline u={u} playerId={playerId} />
         </div>

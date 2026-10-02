@@ -9,7 +9,7 @@ import { TeamBadge } from './bits';
 export function BetPanel({ game, onDone }: { game: ScheduledGame; onDone(): void }) {
   const u = useGame((s) => s.u)!;
   const dispatch = useGame((s) => s.dispatch);
-  const existing = u.bets.find((b) => b.gameId === game.id);
+  const existing = u.bets.find((b) => b.gameId === game.id && b.season === u.season);
   const [teamId, setTeamId] = useState<string>(existing?.teamId ?? game.homeId);
   const [amount, setAmount] = useState(Math.min(10, u.coins));
   const odds = currentOdds(u, game.id);

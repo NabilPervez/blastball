@@ -124,7 +124,7 @@ export function mergePacks(packs: RulePack[]): RulePack {
 // ---------------------------------------------------------------------------
 // State the weirdness system owns.
 
-export type PlayerStatus = 'departed' | 'returned' | 'reserve';
+export type PlayerStatus = 'departed' | 'returned' | 'reserve' | 'retired';
 
 export interface ActiveMod {
   id: string;

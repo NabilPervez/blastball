@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { ScheduledGame } from '../../engine/types';
-import { gamesOn, isSeasonOver, seasonDays, unplayedToday } from '../../world/universe';
+import { betsThisSeason, gamesOn, isSeasonOver, lastScheduledDay, seasonDays, unplayedToday } from '../../world/universe';
 import { formatMult } from '../../engine/odds';
 import { BetPanel } from '../components/BetPanel';
 import { TeamBadge } from '../components/bits';
@@ -27,12 +27,15 @@ export function GameCard({ game }: { game: ScheduledGame }) {
     </div>
   );
   const status = r ? (r.innings > 9 ? `Final/${r.innings}` : 'Final') : today ? (started ? 'In progress ▶' : 'Watch ▶') : `Day ${game.day}`;
+  const series = u.playoffs?.series.find((s) => s.games.includes(game.id));
   return (
     <div className="game-card card">
       <button className="gc-main" onClick={() => watch(game.id)} aria-label={`${away.name} at ${home.name}, ${status}`}>
         {row(away, r?.awayScore)}
         {row(home, r?.homeScore)}
-        <span className={`gc-status ${!r && today ? 'live' : ''}`}>{status}</span>
+        <span className={`gc-status ${!r && today ? 'live' : ''}`}>
+          {series && <span className="pill">{series.round === u.playoffs!.finalRound ? 'Final' : 'Semifinal'} · game {series.games.indexOf(game.id) + 1}</span>} {status}
+        </span>
       </button>
       <BetLine game={game} betting={betting} setBetting={setBetting} />
     </div>
@@ -41,7 +44,7 @@ export function GameCard({ game }: { game: ScheduledGame }) {
 
 function BetLine({ game, betting, setBetting }: { game: ScheduledGame; betting: boolean; setBetting(b: boolean): void }) {
   const u = useGame((s) => s.u)!;
-  const bet = u.bets.find((b) => b.gameId === game.id);
+  const bet = betsThisSeason(u).find((b) => b.gameId === game.id);
   const open = game.day === u.currentDay && !u.results[game.id] && !u.started.includes(game.id);
   const team = bet && u.league.teams.find((t) => t.id === bet.teamId)!;
   if (betting && open) return <BetPanel game={game} onDone={() => setBetting(false)} />;
@@ -67,8 +70,19 @@ function BetLine({ game, betting, setBetting }: { game: ScheduledGame; betting: 
 export function TimeControls() {
   const u = useGame((s) => s.u)!;
   const { run, busy } = useGame();
-  if (isSeasonOver(u)) return null;
+  if (isSeasonOver(u)) {
+    return (
+      <div className="time-controls" role="group" aria-label="Time controls">
+        <button className="btn primary" disabled={busy} onClick={() => run({ type: 'endDay' })}>
+          Start Season {u.season + 1} →
+        </button>
+        {u.clock && <span className="muted small">Living time will start it automatically after one day.</span>}
+        {busy && <span className="muted small" role="status">Simulating…</span>}
+      </div>
+    );
+  }
   const remaining = unplayedToday(u).length;
+  const playoffs = u.phase === 'playoffs';
   return (
     <div className="time-controls" role="group" aria-label="Time controls">
       <button className="btn primary" disabled={busy} onClick={() => run({ type: 'nextGame' })}>
@@ -84,10 +98,10 @@ export function TimeControls() {
         className="btn"
         disabled={busy}
         onClick={() => {
-          if (confirm('Simulate the rest of the season?')) run({ type: 'simToSeasonEnd' });
+          if (confirm(playoffs ? 'Simulate the rest of the playoffs?' : 'Simulate the rest of the season, including the playoffs?')) run({ type: 'simToSeasonEnd' });
         }}
       >
-        To season end
+        {playoffs ? 'To the champion' : 'To season end'}
       </button>
       {busy && <span className="muted small" role="status">Simulating…</span>}
     </div>
@@ -97,7 +111,7 @@ export function TimeControls() {
 export function Games() {
   const u = useGame((s) => s.u)!;
   const watchingGameId = useGame((s) => s.watchingGameId);
-  const maxDay = seasonDays(u);
+  const maxDay = Math.max(lastScheduledDay(u), 1);
   const [day, setDay] = useState(Math.min(u.currentDay, maxDay));
 
   if (watchingGameId) return <GameView key={watchingGameId} gameId={watchingGameId} />;
@@ -112,7 +126,7 @@ export function Games() {
             ‹
           </button>
           <span>
-            Day {day} <span className="muted">/ {maxDay}</span>
+            {day > seasonDays(u) ? `Playoffs · day ${day - seasonDays(u)}` : `Day ${day}`} <span className="muted">/ {seasonDays(u)}</span>
           </span>
           <button className="chip" onClick={() => setDay((d) => Math.min(maxDay, d + 1))} disabled={day >= maxDay} aria-label="Next day">
             ›

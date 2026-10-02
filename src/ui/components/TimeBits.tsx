@@ -23,7 +23,7 @@ export function LivingClock() {
   return (
     <p className="living-clock">
       <span className="live-dot" aria-hidden="true" /> Living time · 1 day = {len} · day {u.currentDay} ends in{' '}
-      <strong>{formatDuration(msUntilNextDay(u.clock, u.settings.dayLengthMinutes, u.currentDay, now))}</strong>
+      <strong>{formatDuration(msUntilNextDay(u.clock, u.settings.dayLengthMinutes, u.dayCount, now))}</strong>
     </p>
   );
 }

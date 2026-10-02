@@ -1,0 +1,278 @@
+import { useEffect, type ReactNode } from 'react';
+import { setSetting } from '../../storage/db';
+import { MAX_CATCHUP_DAYS } from '../../world/clock';
+import { ORGANIZER_DISCOUNT_PCT } from '../../world/elections';
+import { FACTION_BUDGET } from '../../world/factions';
+import { DIEHARD_BONUS_PCT, GAMBLER_UNDERDOG_PCT, PERSONAS, type PersonaKind } from '../../world/persona';
+import { FINAL_BEST_OF, SEMIS_BEST_OF } from '../../world/seasons';
+import { DAILY_STIPEND, PATRON_BLESSING, PATRON_COST, PATRON_FROM_SEASON, RULES, STARTING_COINS } from '../../world/universe';
+import { BACKUP_EVERY_DAYS } from '../components/TimeBits';
+import { useGame } from '../store';
+
+type Status = 'live' | 'soon';
+
+const SECTIONS = [
+  ['idea', 'The idea'],
+  ['loop', 'The core loop'],
+  ['ladder', 'Your powers'],
+  ['time', 'Time'],
+  ['watch', 'Watching games'],
+  ['bet', 'Coins & betting'],
+  ['persona', 'Fan personas'],
+  ['vote', 'Elections & factions'],
+  ['weird', 'Weirdness'],
+  ['death', 'Death & the Departed'],
+  ['seasons', 'Seasons, playoffs & aging'],
+  ['patron', 'Patron'],
+  ['cards', 'Player cards'],
+  ['history', 'History & news'],
+  ['saves', 'Saves, backups & offline'],
+  ['soon', 'Coming soon'],
+  ['faq', 'FAQ'],
+] as const;
+
+function Section({ id, title, status = 'live', children }: { id: string; title: string; status?: Status; children: ReactNode }) {
+  return (
+    <section id={`g-${id}`} className="guide-section card pad" aria-labelledby={`gt-${id}`}>
+      <h2 id={`gt-${id}`} className="guide-h">
+        {title} {status === 'soon' && <span className="pill">Coming soon</span>}
+      </h2>
+      {children}
+    </section>
+  );
+}
+
+function Ladder() {
+  const u = useGame((s) => s.u);
+  const rows: { tier: string; unlock: string; ability: string; unlocked: boolean | null; soon?: boolean }[] = [
+    { tier: 'Observer', unlock: 'From the start', ability: 'Watch games, follow teams and players', unlocked: true },
+    { tier: 'Gambler', unlock: 'From the start', ability: 'Bet coins on games', unlocked: true },
+    { tier: 'Voter', unlock: 'First election', ability: 'Buy votes to shape the rules', unlocked: u ? u.elections.length > 0 : null },
+    { tier: 'Patron', unlock: `Season ${PATRON_FROM_SEASON}`, ability: `Sponsor a team (+${PATRON_BLESSING} to its players for a season)`, unlocked: u ? u.season >= PATRON_FROM_SEASON : null },
+    { tier: 'Commissioner', unlock: 'Toggle any time', ability: 'Edit the world directly — marks the save as Commissioner forever', unlocked: false, soon: true },
+  ];
+  return (
+    <div className="table-wrap">
+      <table className="stat-table guide-table">
+        <thead>
+          <tr>
+            <th scope="col">Tier</th>
+            <th scope="col">Unlocks</th>
+            <th scope="col">What you can do</th>
+            <th scope="col">{u ? 'You' : ''}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.tier}>
+              <th scope="row">{r.tier}</th>
+              <td>{r.unlock}</td>
+              <td>{r.ability}</td>
+              <td>{r.soon ? <span className="pill">Soon</span> : r.unlocked === null ? '' : r.unlocked ? '✓ Unlocked' : 'Locked'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+export function Guide() {
+  const { showIntro } = useGame();
+  useEffect(() => {
+    void setSetting('guideOpened', true);
+  }, []);
+
+  return (
+    <section className="guide">
+      <header className="screen-head">
+        <h1>Guide</h1>
+        <button className="btn" onClick={showIntro}>
+          Replay the intro
+        </button>
+      </header>
+      <p className="muted">Everything you can do in Blastball — what's here now, and what's on the way.</p>
+
+      <nav className="card pad guide-toc" aria-label="Guide contents">
+        <ol>
+          {SECTIONS.map(([id, label]) => (
+            <li key={id}>
+              <a href={`#g-${id}`}>{label}</a>
+            </li>
+          ))}
+        </ol>
+      </nav>
+
+      <Section id="idea" title="The idea">
+        <p>Blastball is a fictional, slightly absurd sports league that plays itself. You never control a game. You're a fan living inside a strange sports universe: you watch, bet, vote, and over many seasons the simulation tells its own stories — rivalries, slumps, curses, deaths, returns, rules nobody asked for.</p>
+        <p>Every league comes from a <strong>seed</strong>. The same seed always builds the same league, so you can share yours with a friend.</p>
+      </Section>
+
+      <Section id="loop" title="The core loop">
+        <ol className="guide-steps">
+          <li>Check in and read <em>While You Were Gone</em>.</li>
+          <li>Watch or skim today's games.</li>
+          <li>Bet coins on games you have a feeling about.</li>
+          <li>Spend coins on votes in the weekly election.</li>
+          <li>The election resolves, the rules change, the world gets stranger. Repeat.</li>
+        </ol>
+        <p className="muted small">Betting is how you earn influence; influence is how you shape the world.</p>
+      </Section>
+
+      <Section id="ladder" title="Your powers">
+        <Ladder />
+      </Section>
+
+      <Section id="time" title="Time">
+        <p>
+          <strong>Living</strong> (default): one in-game day passes every 15 minutes, 30 minutes, 1 hour, 4 hours or 1 real day — your choice, changeable any time in Settings. The league keeps playing while the app is closed. When you return it catches up on up to {MAX_CATCHUP_DAYS} missed days; after a week away it pauses and waits for you.
+        </p>
+        <p>
+          <strong>Manual</strong>: time only moves when you press a control — <em>Next game</em>, <em>Finish day</em>, <em>+7 days</em>, or <em>To season end</em>.
+        </p>
+      </Section>
+
+      <Section id="watch" title="Watching games">
+        <p>Open any of today's games to watch it pitch by pitch, with a scoreboard, the bases, the count and outs. Choose Live, 2× or 5× speed, pause, or jump to the final with Instant.</p>
+        <p>Play-by-play is kept for the last 7 days. <strong>Pin</strong> a finished game to keep its feed forever — find pinned games in History.</p>
+        <p className="muted small">Opening a game counts as starting it: bets on that game close.</p>
+      </Section>
+
+      <Section id="bet" title="Coins & betting">
+        <p>
+          You start with {STARTING_COINS} coins and get a {DAILY_STIPEND}-coin stipend every day, so you can never be shut out. Bet on any of today's games before it starts. Odds come only from public information — star ratings, today's starting pitcher and the standings — with a small house edge. A winning bet pays your stake times the multiplier shown.
+        </p>
+        <p className="muted small">You can add to a bet, but you can't back both sides of the same game.</p>
+      </Section>
+
+      <Section id="persona" title="Fan personas">
+        <p>You pick a persona when you create a league. It's chosen once and gives you a perk:</p>
+        <ul className="guide-list">
+          {(Object.keys(PERSONAS) as PersonaKind[]).map((k) => (
+            <li key={k}>
+              <strong>{PERSONAS[k].label}</strong> — {PERSONAS[k].flavor} <span className="perk">{PERSONAS[k].perk}</span>
+            </li>
+          ))}
+        </ul>
+        <p className="muted small">
+          Exact numbers: Diehard +{DIEHARD_BONUS_PCT}% of the stake on winning bets for their team; Gambler +{GAMBLER_UNDERDOG_PCT}% on underdog odds; Organizer −{ORGANIZER_DISCOUNT_PCT}% vote prices; the Analyst sees one hidden rating per player; the Prophet gets an exact preview of tonight's strangeness.
+        </p>
+      </Section>
+
+      <Section id="vote" title="Elections & factions">
+        <p>Each in-game week has an election with three proposals — one is always <em>Keep Things As They Are</em>. Proposals do real things: batting practice for a team, a hand up for last place, humbling the leader, juiced or dead balls, greased basepaths, trading two players, or bringing back one of the Departed.</p>
+        <p>
+          Six factions — the Statheads, Loyalists, Chaos Choir, Purists, Lore Divers and Casuals — each cast {FACTION_BUDGET} votes, based only on public information and their own tastes and favorite teams. You can see how they're leaning before you vote.
+        </p>
+        <p>
+          You buy votes with coins at a rising price: <strong>n votes cost n² coins</strong> (1, 4, 9, 16…). Saving up lets you swing a close race; no one can buy everything. Ties go to the status quo.
+        </p>
+      </Section>
+
+      <Section id="weird" title="Weirdness">
+        <p>Most nights something strange might happen. Your league's <strong>chaos</strong> level (Calm, Normal, Weird, Unhinged) sets how often.</p>
+        <ul className="guide-list">
+          <li>
+            <strong>Player modifiers</strong> (shown as icons on cards):{' '}
+            {RULES.playerMods
+              .filter((m) => !m.returnedOnly)
+              .map((m) => `${m.icon} ${m.name}`)
+              .join(', ')}
+            . Some last days, some are permanent.
+          </li>
+          <li>
+            <strong>Stadium effects</strong>: {RULES.stadiumMods.map((m) => `${m.icon} ${m.name}`).join(', ')}. See them on a team's page.
+          </li>
+          <li>
+            <strong>Breakthroughs and slumps</strong> permanently nudge players' ratings.
+          </li>
+        </ul>
+        <p className="muted small">All weirdness is data in a rule pack, so new strangeness can be added without changing the game itself.</p>
+      </Section>
+
+      <Section id="death" title="Death & the Departed">
+        <p>Very rarely — about 1 to 3 times a season on Normal chaos — a player departs forever. A rookie takes their place, and their card goes grey in the <strong>Hall of the Departed</strong>.</p>
+        <p>
+          Nobody comes back by chance. The only way back is an election: sometimes a <em>Bring Back…</em> proposal appears. If it wins, the player returns to their old team — changed, with a new modifier — and their card glows blue. Whoever held their spot moves to the Reserves.
+        </p>
+      </Section>
+
+      <Section id="seasons" title="Seasons, playoffs & aging">
+        <p>
+          After the regular season the top four teams (top two in a 4-team league) play for the <strong>Blastball Cup</strong>: semifinals are best of {SEMIS_BEST_OF}, the final best of {FINAL_BEST_OF}. Playoff games don't count in the standings. The season's MVP and Ace (best pitcher) are named at the end.
+        </p>
+        <p>Then comes a one-day offseason. Everyone ages a year: young players improve, players past thirty fade, and veterans may retire, replaced by rookies. A new schedule is drawn and Season N+1 begins.</p>
+      </Section>
+
+      <Section id="patron" title="Patron">
+        <p>
+          From Season {PATRON_FROM_SEASON}, you can become a team's Patron for {PATRON_COST} coins: every player on that team gets +{PATRON_BLESSING} to all ratings for the rest of the season. One team per season. Sponsor from Today or from the team's page.
+        </p>
+      </Section>
+
+      <Section id="cards" title="Player cards">
+        <p>Every player is a collectible card with procedurally drawn art, star ratings and a frame showing their story, not their stats:</p>
+        <ul className="guide-list">
+          <li>
+            <strong>Rookie</strong> → <strong>Veteran</strong> (60+ games or a few big moments) → <strong>Legend</strong> (a career full of moments).
+          </li>
+          <li>
+            <strong>Departed</strong> cards are desaturated; <strong>Returned</strong> cards glow.
+          </li>
+        </ul>
+        <p>Flip a card on a player's page for their stats. Star groups: Batting, Pitching, Baserunning and Defense, each rolled up from hidden ratings.</p>
+      </Section>
+
+      <Section id="history" title="History & news">
+        <p>The Today screen shows breaking news; the Vote tab keeps a longer feed. The <strong>History</strong> tab keeps a permanent timeline — elections, departures, returns, strange events, retirements and champions — plus past seasons, pinned games and the Hall of the Departed.</p>
+      </Section>
+
+      <Section id="saves" title="Saves, backups & offline">
+        <p>There are no accounts and no servers. Your universes are saved automatically in this browser and the app works offline after the first visit.</p>
+        <ul className="guide-list">
+          <li>
+            <strong>Export</strong> a .league file from Settings to back up or move a league; <strong>Import</strong> it anywhere. You'll get a gentle reminder every {BACKUP_EVERY_DAYS} in-game days.
+          </li>
+          <li>
+            <strong>Install</strong> Blastball to your home screen — on iPhone especially, installed apps keep their saves far more reliably.
+          </li>
+          <li>You can keep several universes and switch between them from the top bar.</li>
+        </ul>
+      </Section>
+
+      <Section id="soon" title="Coming soon" status="soon">
+        <ul className="guide-list">
+          <li>
+            <strong>Commissioner Mode</strong> — edit the world directly. Using it permanently badges the save as a Commissioner save.
+          </li>
+          <li>
+            <strong>“What If?” branches</strong> — rewind to an earlier snapshot and play out a different future, nested under the original league.
+          </li>
+          <li>
+            <strong>Faction news</strong> — factions react to events and to you by name as your influence grows.
+          </li>
+          <li>
+            <strong>Card motion</strong> — cards that tilt with your pointer or phone, with a foil sheen.
+          </li>
+          <li>
+            <strong>Optional AI headlines</strong> — bring your own AI key for generated recaps (stored only on your device).
+          </li>
+          <li>Later, maybe: shared rule packs, a community seed gallery, achievements.</li>
+        </ul>
+      </Section>
+
+      <Section id="faq" title="FAQ">
+        <dl className="guide-faq">
+          <dt>Can I control the players?</dt>
+          <dd>No — that's the point. You influence the world through bets, votes and (later) sponsorship.</dd>
+          <dt>I ran out of coins.</dt>
+          <dd>You get {DAILY_STIPEND} coins every day. Small, careful bets add up.</dd>
+          <dt>Why did my old game lose its play-by-play?</dt>
+          <dd>Feeds are kept for 7 days to keep saves small. Pin games you want to keep.</dd>
+          <dt>Is the game the same on every device?</dt>
+          <dd>Yes — the simulation is deterministic. Same seed and same choices, same results.</dd>
+        </dl>
+      </Section>
+    </section>
+  );
+}

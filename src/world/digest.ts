@@ -1,6 +1,5 @@
-import { computeStandings } from '../engine/season';
 import { MAX_CATCHUP_DAYS } from './clock';
-import { DAILY_STIPEND, type UniverseState, type WorldEvent } from './universe';
+import { DAILY_STIPEND, standingsOf, type UniverseState, type WorldEvent } from './universe';
 
 /**
  * "While You Were Gone" (PRD §6): what happened across a stretch of simulated days, ranked by
@@ -108,8 +107,8 @@ export function buildDigest(before: UniverseState, after: UniverseState, events:
   items.push(...moments.sort((a, b) => b.importance - a.importance || a.day - b.day).slice(0, MAX_MOMENTS));
 
   // Standings.
-  const leaderBefore = computeStandings(before.league.teams, Object.values(before.results))[0];
-  const leaderAfter = computeStandings(after.league.teams, Object.values(after.results))[0];
+  const leaderBefore = standingsOf(before)[0];
+  const leaderAfter = standingsOf(after)[0];
   if (played.length && leaderAfter.teamId !== leaderBefore.teamId) {
     items.push({ importance: 40, day: after.currentDay - 1, kind: 'standings', text: `The ${teamName(leaderAfter.teamId)} now lead the league at ${leaderAfter.wins}–${leaderAfter.losses}.` });
   }
