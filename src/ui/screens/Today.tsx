@@ -5,7 +5,7 @@ import { InstallBanner } from '../components/InstallBanner';
 import { Bracket, PatronPanel, SeasonAwards } from '../components/SeasonBits';
 import { ChecklistCard } from '../components/Onboarding';
 import { PicksPanel } from '../components/FanFeatures';
-import { BackupReminder, LivingClock, WhileYouWereGone } from '../components/TimeBits';
+import { BackupReminder, DayCountdown, LivingClock, WhileYouWereGone } from '../components/TimeBits';
 import { NewsFeed } from './Vote';
 import { ChoosePersona, FanCard, Ledger, OpenBets } from '../components/Wallet';
 import { useGame } from '../store';
@@ -47,6 +47,7 @@ export function Today() {
           </button>
         </p>
         <LivingClock />
+        <DayCountdown />
       </header>
 
       <WhileYouWereGone />

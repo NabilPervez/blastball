@@ -5,7 +5,7 @@ import { formatMult } from '../../engine/odds';
 import { BetPanel, MassBet } from '../components/BetPanel';
 import { BaseDiamond, Outs, TeamBadge } from '../components/bits';
 import { useGame } from '../store';
-import { FirstPitch, useNow } from '../components/TimeBits';
+import { DayCountdown, FirstPitch, useNow } from '../components/TimeBits';
 import { describeEvent } from '../../narrative/playByPlay';
 import { GameView } from './GameView';
 
@@ -177,6 +177,12 @@ export function Games() {
   const watchingGameId = useGame((s) => s.watchingGameId);
   const maxDay = Math.max(lastScheduledDay(u), 1);
   const [day, setDay] = useState(Math.min(u.currentDay, maxDay));
+  // When a new day begins, move the screen forward with it.
+  const [seenDay, setSeenDay] = useState(u.currentDay);
+  if (seenDay !== u.currentDay) {
+    setSeenDay(u.currentDay);
+    setDay(Math.min(u.currentDay, maxDay));
+  }
 
   if (watchingGameId) return <GameView key={watchingGameId} gameId={watchingGameId} />;
 
@@ -202,6 +208,7 @@ export function Games() {
           )}
         </div>
       </header>
+      {day === u.currentDay && <DayCountdown />}
       {day > u.currentDay && <p className="muted">Upcoming — these games haven't happened yet.</p>}
       <div className="game-grid">
         {games.map((g) => (

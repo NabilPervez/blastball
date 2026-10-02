@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { exportUniverse, leagueFileName } from '../../storage/exportImport';
 import { DAY_LENGTHS, DEFAULT_FIRST_PITCH_PCT, firstPitchMs, formatDuration, msUntilNextDay } from '../../world/clock';
-import { isSeasonOver } from '../../world/universe';
+import { gamesOn, isSeasonOver, unplayedToday } from '../../world/universe';
 import { shareOrDownload } from '../pwa';
 import { useGame } from '../store';
 import { LinkedText } from './LinkedText';
@@ -41,6 +41,66 @@ export function FirstPitch({ now }: { now: number }) {
       {' '}
       · first pitch in <strong>{formatDuration(start - now)}</strong>
     </>
+  );
+}
+
+const clockText = (ms: number) => {
+  const s = Math.ceil(ms / 1000);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return h ? `${h}:${pad(m)}:${pad(s % 60)}` : `${m}:${pad(s % 60)}`;
+};
+
+/**
+ * Where today stands, with a live countdown: bets lock in… → games in progress → day complete,
+ * next day in…. Living mode only (Manual moves when you press a button).
+ */
+export function DayCountdown() {
+  const u = useGame((s) => s.u)!;
+  const now = useNow(1000);
+  const running = useGame((s) => s.running);
+  if (!u.clock || u.settings.timeMode !== 'living' || isSeasonOver(u)) return null;
+  const todays = gamesOn(u, u.currentDay);
+  if (!todays.length) return null;
+  const lock = firstPitchMs(u.clock, u.settings.dayLengthMinutes, u.dayCount, u.settings.firstPitchPct ?? DEFAULT_FIRST_PITCH_PCT);
+  const dayEnd = now + msUntilNextDay(u.clock, u.settings.dayLengthMinutes, u.dayCount, now);
+  const left = unplayedToday(u);
+  const anyStarted = left.some((g) => running[g.id] || u.started.includes(g.id));
+
+  if (!left.length) {
+    return (
+      <div className="day-countdown done" role="status">
+        <span className="dc-label">Day {u.currentDay} complete ✓</span>
+        <span className="dc-time">
+          Day {u.currentDay + 1} in <strong>{clockText(dayEnd - now)}</strong>
+        </span>
+      </div>
+    );
+  }
+  if (now < lock && !anyStarted) {
+    const total = lock - (dayEnd - u.settings.dayLengthMinutes * 60_000);
+    const pct = Math.max(0, Math.min(100, 100 - ((lock - now) / total) * 100));
+    const urgent = lock - now < 60_000;
+    return (
+      <div className={`day-countdown ${urgent ? 'urgent' : ''}`} role="timer" aria-label={`Bets lock in ${formatDuration(lock - now)}`}>
+        <span className="dc-label">🔒 Bets lock in</span>
+        <strong className="dc-big">{clockText(lock - now)}</strong>
+        <span className="dc-bar" aria-hidden="true">
+          <span style={{ width: `${pct}%` }} />
+        </span>
+      </div>
+    );
+  }
+  return (
+    <div className="day-countdown live" role="status">
+      <span className="dc-label">
+        <span className="live-dot" aria-hidden="true" /> {left.length} game{left.length === 1 ? '' : 's'} in progress · bets locked
+      </span>
+      <span className="dc-time">
+        Day ends in <strong>{clockText(dayEnd - now)}</strong>
+      </span>
+    </div>
   );
 }
 
