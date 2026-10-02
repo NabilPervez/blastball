@@ -34,6 +34,12 @@ interface State {
   /** The game currently playing live in the "Now playing" ticker. */
   live: { gameId: string; events: GameEvent[]; shown: number } | null;
   liveEnabled: boolean;
+  /** Games running in the background (from "Play all games" or left mid-watch), keyed by game id. */
+  running: Record<string, { events: GameEvent[]; shown: number }>;
+  /** Start every unplayed game today at once. */
+  startAll(): Promise<void>;
+  /** Remember how far the player watched a game so it keeps playing after they leave. */
+  setProgress(gameId: string, events: GameEvent[], shown: number): void;
   setLiveEnabled(on: boolean): void;
   /** Advance the live ticker by one play (called on a timer). */
   liveTick(): Promise<void>;
@@ -75,6 +81,7 @@ export const useGame = create<State>((set, get) => ({
   catchingUp: null,
   live: null,
   liveEnabled: true,
+  running: {},
 
   init: async () => {
     try {
@@ -121,7 +128,7 @@ export const useGame = create<State>((set, get) => ({
     const u = createUniverse(crypto.randomUUID(), settings, Date.now(), persona);
     await store.saveUniverse(u);
     await store.setSetting(LAST_UNIVERSE, u.id);
-    set({ u, view: 'app', tab: 'today', watchingGameId: null, detail: null, live: null });
+    set({ u, view: 'app', tab: 'today', watchingGameId: null, detail: null, live: null, running: {} });
   },
 
   openUniverse: async (id) => {
@@ -129,7 +136,7 @@ export const useGame = create<State>((set, get) => ({
       const u = await store.loadUniverse(id);
       if (!u) throw new Error('That universe no longer exists.');
       await store.setSetting(LAST_UNIVERSE, id);
-      set({ u, view: 'app', watchingGameId: null, detail: null, digest: null, live: null });
+      set({ u, view: 'app', watchingGameId: null, detail: null, digest: null, live: null, running: {} });
       await get().catchUp();
     } catch (e) {
       set({ error: message(e) });
@@ -231,24 +238,44 @@ export const useGame = create<State>((set, get) => ({
     void store.setSetting('liveTicker', on);
   },
 
-  liveTick: async () => {
-    const { u, live, liveEnabled, busy, view } = get();
-    if (!u || view !== 'app' || !liveEnabled || busy || u.phase === 'offseason') return;
-    if (live) {
-      // Finished some other way (watched to the end, Next game, the day ended…): move on.
-      if (u.results[live.gameId]) return set({ live: null });
-      if (live.shown < live.events.length) return set({ live: { ...live, shown: live.shown + 1 } });
-      await get().run({ type: 'playGame', gameId: live.gameId });
-      return set({ live: null });
+  setProgress: (gameId, events, shown) => set({ running: { ...get().running, [gameId]: { events, shown } } }),
+
+  startAll: async () => {
+    const u = get().u;
+    if (!u || get().busy) return;
+    const live = get().live;
+    for (const g of unplayedToday(u)) {
+      if (get().running[g.id] || live?.gameId === g.id) continue;
+      if (!get().u!.started.includes(g.id)) await get().dispatch({ type: 'gameStarted', gameId: g.id });
+      const events = await sim().replayGame(get().u!, g.id);
+      if (get().u?.results[g.id] || get().running[g.id]) continue;
+      set({ running: { ...get().running, [g.id]: { events, shown: 1 } } });
     }
-    const next = unplayedToday(u)[0];
-    if (!next) return;
-    // Going live locks betting on this game, exactly like opening it to watch.
-    if (!u.started.includes(next.id)) await get().dispatch({ type: 'gameStarted', gameId: next.id });
-    // The sim is deterministic: this preview is exactly what will be recorded.
-    const events = await sim().replayGame(get().u!, next.id);
-    if (get().live || get().u?.results[next.id]) return;
-    set({ live: { gameId: next.id, events, shown: 1 } });
+  },
+
+  liveTick: async () => {
+    const { u, live, liveEnabled, busy, view, running, watchingGameId } = get();
+    // Games only start when the player kicks them off (Play all, or opening one to watch).
+    if (!u || view !== 'app' || busy || !liveEnabled || u.phase === 'offseason') return;
+
+    // Background games advance one play per tick (the one being watched full-screen drives itself).
+    const ids = Object.keys(running);
+    if (ids.length) {
+      const next: State['running'] = {};
+      const finished: string[] = [];
+      for (const id of ids) {
+        const r = running[id];
+        if (u.results[id]) continue;
+        if (id === watchingGameId) next[id] = r;
+        else if (r.shown < r.events.length) next[id] = { ...r, shown: r.shown + 1 };
+        else finished.push(id);
+      }
+      set({ running: next });
+      for (const id of finished) if (!get().u?.results[id]) await get().run({ type: 'playGame', gameId: id });
+    }
+
+    // Older saves' ticker game: finish it off like any other running game.
+    if (live && !u.results[live.gameId] && !running[live.gameId]) set({ running: { ...get().running, [live.gameId]: { events: live.events, shown: live.shown } }, live: null });
   },
 
   clearError: () => set({ error: null }),

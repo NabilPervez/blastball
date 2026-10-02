@@ -14,9 +14,10 @@ const FILTERS: { id: TimelineKind | 'all'; label: string }[] = [
   { id: 'champion', label: 'Champions' },
   { id: 'retirement', label: 'Retirements' },
   { id: 'rivalry', label: 'Rivalries' },
+  { id: 'relegation', label: 'Relegations' },
 ];
 
-const KIND_MARK: Record<TimelineKind, string> = { election: '✦', death: '✕', return: '◎', weird: '◐', champion: '★', retirement: '◇', rivalry: '⚔' };
+const KIND_MARK: Record<TimelineKind, string> = { election: '✦', death: '✕', return: '◎', weird: '◐', champion: '★', retirement: '◇', rivalry: '⚔', relegation: '⬇' };
 
 function Timeline({ u }: { u: UniverseState }) {
   const [filter, setFilter] = useState<TimelineKind | 'all'>('all');
@@ -171,7 +172,7 @@ export function History() {
                   .slice()
                   .reverse()
                   .map((a) => {
-                    const team = (id: string | null) => (id ? u.league.teams.find((t) => t.id === id)?.name ?? '—' : '—');
+                    const team = (id: string | null) => (id ? a.teamNames?.[id] ?? u.league.teams.find((t) => t.id === id)?.name ?? '—' : '—');
                     const best = a.standings[0];
                     const pl = (id: string | null) =>
                       id ? (

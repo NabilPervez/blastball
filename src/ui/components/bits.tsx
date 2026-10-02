@@ -1,3 +1,4 @@
+import type React from 'react';
 import type { Bases, Team } from '../../engine/types';
 
 export function Stars({ value, label }: { value: number; label: string }) {
@@ -44,6 +45,15 @@ export function Outs({ outs }: { outs: number }) {
       {[0, 1, 2].map((i) => (
         <span key={i} className={i < outs ? 'dot on' : 'dot'} />
       ))}
+    </span>
+  );
+}
+
+/** Hover (or tap/focus on touch screens) to read an explanation. */
+export function Tip({ text, children, className = '' }: { text: string; children: React.ReactNode; className?: string }) {
+  return (
+    <span className={`tip ${className}`} tabIndex={0} data-tip={text} aria-label={typeof children === 'string' ? `${children}: ${text}` : undefined}>
+      {children}
     </span>
   );
 }

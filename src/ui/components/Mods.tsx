@@ -1,6 +1,7 @@
 import type { ModDef } from '../../world/weird';
 import { findPlayerMod, findStadiumMod, isActiveMod } from '../../world/weird';
 import { RULES, type UniverseState } from '../../world/universe';
+import { deltaNote, describeDelta } from '../../world/statHelp';
 
 export interface ShownMod {
   def: ModDef;
@@ -21,8 +22,9 @@ export function stadiumModsOf(u: UniverseState, teamId: string): ShownMod[] {
     .filter((m) => !!m.def);
 }
 
-export function ModList({ mods, currentDay }: { mods: ShownMod[]; currentDay: number }) {
-  if (!mods.length) return <p className="muted small">None.</p>;
+/** `role` adds a note when a trait changes ratings this kind of player never uses. */
+export function ModList({ mods, currentDay, role }: { mods: ShownMod[]; currentDay: number; role?: 'batter' | 'pitcher' }) {
+  if (!mods.length) return <p className="muted small">Nothing unusual right now.</p>;
   return (
     <ul className="mod-list">
       {mods.map((m) => (
@@ -32,6 +34,8 @@ export function ModList({ mods, currentDay }: { mods: ShownMod[]; currentDay: nu
           </span>
           <span>
             <strong>{m.def.name}</strong> <span className="muted small">— {m.def.description}</span>
+            {Object.keys(m.def.delta).length > 0 && <span className="small mod-effect"> {describeDelta(m.def.delta)}.</span>}
+            {role && deltaNote(m.def.delta, role) && <span className="small mod-note"> {deltaNote(m.def.delta, role)}</span>}
             <span className="muted small">
               {' '}
               {m.until ? `(${Math.max(0, m.until.day - currentDay + 1)} more days)` : '(permanent)'}

@@ -215,3 +215,37 @@ h2 { font-size: 1.2rem; color: var(--muted); margin: 28px 0 12px; }
 .game-card { padding: 0; }
 .gc-main { display: grid; gap: 6px; padding: 14px; width: 100%; background: none; border: 0; text-align: left; }
 @media (max-width: 480px) { .gc-row .city { display: none; } }
+
+/* Live state on game cards (Play all / in-progress games). */
+.gc-live { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; color: var(--text); font-variant-numeric: tabular-nums; }
+.gc-live .gc-inning { font-weight: 600; min-width: 2.2em; }
+.gc-live .gc-count { color: var(--muted); }
+.play-all { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 16px 0 0; }
+.gc-live svg { width: 42px; height: 31px; }
+
+/* Tooltips: hover on desktop, tap (focus) on touch. */
+.tip { position: relative; cursor: help; text-decoration: underline dotted color-mix(in srgb, currentColor 45%, transparent); text-underline-offset: 3px; }
+.tip::after {
+  content: attr(data-tip); position: absolute; left: 50%; bottom: calc(100% + 6px); transform: translateX(-50%);
+  width: max-content; max-width: min(260px, 80vw); padding: 8px 10px; border-radius: 8px;
+  background: var(--surface-2, #1c1c24); color: var(--text); border: 1px solid var(--line, rgba(255,255,255,0.12));
+  font-size: 0.78rem; font-weight: 400; line-height: 1.35; letter-spacing: 0; text-transform: none; text-align: left; white-space: normal;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.35); opacity: 0; pointer-events: none; transition: opacity 0.12s; z-index: 50;
+}
+.tip:hover::after, .tip:focus::after, .tip:focus-visible::after { opacity: 1; }
+.tip:focus { outline: none; }
+.tip:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 3px; }
+.ratings-table tr.unused td, .ratings-table tr.unused th { opacity: 0.55; }
+.ratings-note { padding: 8px 12px 12px; margin: 0; }
+.mod-effect { color: var(--secondary); }
+.mod-note { color: var(--muted); font-style: italic; }
+.guide-stats dt { font-weight: 600; margin-top: 8px; }
+.guide-stats dd { margin: 2px 0 0; color: var(--muted); }
+.ratings-table .tip::after { left: 0; transform: none; bottom: auto; top: calc(100% + 6px); }
+.trophy-case { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+.trophy { display: grid; justify-items: center; gap: 2px; padding: 14px 10px; text-align: center; border-color: var(--secondary); }
+.trophy-icon { font-size: 2rem; }
+.top-rank strong { color: var(--secondary); }
+.stadium-perk { margin: 4px 0; }
+.gc-side { font-size: 0.62rem; letter-spacing: 0.08em; color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; margin-left: auto; }
+.gc-play { font-size: 0.8rem; color: var(--text); line-height: 1.3; }

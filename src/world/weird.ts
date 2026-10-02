@@ -154,6 +154,8 @@ export interface ActiveMod {
 
 export interface Stadium {
   name: string;
+  /** Season the stadium was rebuilt for a new franchise (after relegation). */
+  rebuilt?: number;
   mods: ActiveMod[];
 }
 

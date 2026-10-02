@@ -4,12 +4,12 @@ import { useGame } from '../store';
 import { BaseDiamond, Outs, TeamBadge } from './bits';
 
 /**
- * "Now playing": today's games stream live, one after another, on every screen.
+ * "Now playing": games the player has started stream live on every screen.
  * Tap to watch the full play-by-play; pause to stop games playing on their own.
  */
 export function LiveTicker() {
   const u = useGame((s) => s.u)!;
-  const live = useGame((s) => s.live);
+  const running = useGame((s) => s.running);
   const enabled = useGame((s) => s.liveEnabled);
   const { setLiveEnabled, watch, tab, watchingGameId } = useGame();
 
@@ -25,9 +25,10 @@ export function LiveTicker() {
       </div>
     );
   }
-  if (!live) return null;
-  // Already watching this game full-screen.
-  if (tab === 'games' && watchingGameId === live.gameId) return null;
+  // Show the first running game that isn't already open full-screen.
+  const liveId = Object.keys(running).find((id) => !u.results[id] && !(tab === 'games' && watchingGameId === id));
+  if (!liveId) return null;
+  const live = { gameId: liveId, ...running[liveId] };
 
   const game = u.schedule.find((g) => g.id === live.gameId);
   if (!game) return null;
@@ -40,7 +41,7 @@ export function LiveTicker() {
   let playIdx = idx;
   while (playIdx > 0 && ['ball', 'calledStrike', 'swingingStrike', 'foul', 'atBat'].includes(live.events[playIdx].kind)) playIdx--;
   const play = live.events[playIdx];
-  const remaining = unplayedToday(u).length;
+  const remaining = Object.keys(running).filter((id) => !u.results[id]).length;
 
   return (
     <div className={`live-ticker ${isBigMoment(e) ? 'flash' : ''}`} role="region" aria-label={`Now playing: ${away.name} ${e.score.away}, ${home.name} ${e.score.home}`}>
@@ -72,7 +73,7 @@ export function LiveTicker() {
         </span>
       </button>
       <span className="lt-actions">
-        <span className="muted small">{remaining > 1 ? `${remaining - 1} more today` : 'last game today'}</span>
+        <span className="muted small">{remaining > 1 ? `${remaining - 1} more playing` : `${unplayedToday(u).length > remaining ? 'more to start on Games' : 'last game today'}`}</span>
         <button className="chip" onClick={() => setLiveEnabled(false)} aria-label="Pause live games">
           ❚❚
         </button>

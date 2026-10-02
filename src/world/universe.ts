@@ -12,7 +12,8 @@ import { personaMultiplier, winningPayout, type Persona } from './persona';
 import { emptyPicks, MAX_BACKED, MAX_FADED, pickOf, pickPayout, type PickKind, type Picks } from './picks';
 import { advancePlayoffs, ageRatingOffset, initialAge, initialExperience, isPlayoffGame, rookieAge, runOffseason, seasonAwards, startPlayoffs, type Phase, type Playoffs, type SeasonRecord } from './seasons';
 import { createRng } from '../engine/rng';
-import { isRivalry, recordWithWin, RIVALRY_BONUS, teamPerk, type HeadToHead } from './teams';
+import { relegate } from './relegation';
+import { isRivalry, recordWithWin, RIVALRY_BONUS, stadiumPerk, teamPerk, type HeadToHead } from './teams';
 import { agingTraits, applyHappening, birthTraits, createStadiums, DEFAULT_PACKS, effectiveLeague, expireMods, mergePacks, resurrect, rollDay, type WeirdHappening, type WeirdState } from './weird';
 
 /** The active rule packs (data-driven weirdness). */
@@ -58,7 +59,7 @@ export interface UniverseSettings {
   dayLengthMinutes: DayLengthMinutes;
 }
 
-export type TimelineKind = 'election' | 'death' | 'return' | 'weird' | 'champion' | 'retirement' | 'rivalry';
+export type TimelineKind = 'election' | 'death' | 'return' | 'weird' | 'champion' | 'retirement' | 'rivalry' | 'relegation';
 
 /** Notable world events, kept forever (unlike the capped news feed). */
 export interface TimelineEntry {
@@ -284,7 +285,8 @@ export function teamRecords(s: UniverseState): Record<string, { wins: number; lo
 /** Odds a bettor sees for a game right now (public info only). */
 export function currentOdds(s: UniverseState, gameId: string) {
   const game = s.schedule.find((g) => g.id === gameId)!;
-  return oddsForGame(s.league, game, teamRecords(s));
+  // Odds see the same ratings the game will be played with: traits, perks, stadium, rivalry, patron.
+  return oddsForGame(gameLeague(s, game), game, teamRecords(s));
 }
 
 /** The multiplier this player would get backing `teamId` (after persona perks). */
@@ -351,13 +353,15 @@ function withPatron(s: UniverseState, league: League, game: ScheduledGame): Leag
   return { ...league, players };
 }
 
-/** Each team's unique perk, plus the rivalry bonus when rivals meet. */
+/** Each team's unique perk, the home stadium's perk, plus the rivalry bonus when rivals meet. */
 function withTeamIdentity(s: UniverseState, league: League, game: ScheduledGame): League {
   const rivals = isRivalry(s.h2h ?? {}, game.awayId, game.homeId);
   const players = { ...league.players };
   for (const teamId of [game.awayId, game.homeId]) {
     const perk = teamPerk(s.settings.seed, s.league, teamId);
-    const deltas = [...(!perk.homeOnly || teamId === game.homeId ? [perk.delta] : []), ...(rivals ? [RIVALRY_BONUS] : [])];
+    const home = teamId === game.homeId;
+    const park = home ? stadiumPerk(s.settings.seed, s.league, teamId, s.weird.stadiums[teamId]?.rebuilt).delta : null;
+    const deltas = [...(!perk.homeOnly || home ? [perk.delta] : []), ...(park ? [park] : []), ...(rivals ? [RIVALRY_BONUS] : [])];
     if (!deltas.length) continue;
     const team = league.teams.find((t) => t.id === teamId)!;
     for (const id of [...team.lineup, ...team.rotation]) {
@@ -922,7 +926,7 @@ function continuePlayoffs(s: UniverseState, dayEnded: number): UniverseState {
       ...next,
       phase: 'offseason',
       playerLog,
-      archive: [...next.archive, { season: next.season, standings: standingsOf(next).map((r) => ({ teamId: r.teamId, wins: r.wins, losses: r.losses })), championId: playoffs.championId, mvpId, aceId }],
+      archive: [...next.archive, { season: next.season, standings: standingsOf(next).map((r) => ({ teamId: r.teamId, wins: r.wins, losses: r.losses })), championId: playoffs.championId, mvpId, aceId, teamNames: Object.fromEntries(next.league.teams.map((t) => [t.id, t.name])) }],
       timeline: withTimeline(next, 'champion', `The ${champ} win the Season ${next.season} Blastball Cup. ${awards}.`, dayEnded),
     };
     next = { ...next, news: withFactionNews(next, reactToChampion(next.factions, playoffs.championId, champ, next.settings.seed, next.season), dayEnded) };
@@ -930,14 +934,31 @@ function continuePlayoffs(s: UniverseState, dayEnded: number): UniverseState {
   return news.length ? { ...next, news: withNews(next, news.filter(Boolean), dayEnded) } : next;
 }
 
+function withoutTeam(h: HeadToHead, teamId: string): HeadToHead {
+  return Object.fromEntries(Object.entries(h).filter(([id]) => id !== teamId).map(([id, vs]) => [id, Object.fromEntries(Object.entries(vs).filter(([o]) => o !== teamId))]));
+}
+
 /** The offseason ends: everyone ages, veterans retire, rookies arrive and Season N+1 begins. */
 function newSeason(s: UniverseState): UniverseState {
   const season = s.season + 1;
   const off = runOffseason(s.league, s.ages, s.settings.seed, season, s.experience, agingTraits(s.weird, RULES, s.season, s.currentDay));
+
+  // Relegation: last place in the regular season is dissolved and replaced by a brand-new team.
+  const last = standingsOf(s).at(-1);
+  const rel = last && s.league.teams.length > 1 ? relegate(off.league, last.teamId, s.settings.seed, season) : null;
+  if (rel) {
+    off.league = rel.league;
+    for (const id of rel.added) {
+      off.ages[id] = initialAge(id);
+      off.experience[id] = initialExperience(id, off.ages[id]);
+    }
+  }
   const playerLog = { ...s.playerLog };
   for (const n of off.notes) playerLog[n.playerId] = [...(playerLog[n.playerId] ?? []), { season, day: 1, text: n.text }];
   const playerStatus = { ...s.weird.playerStatus };
   for (const r of off.retired) playerStatus[r.playerId] = 'retired';
+  // Relegated players leave the league (their stats stay in the record books).
+  for (const id of rel?.removed ?? []) playerStatus[id] = 'retired';
 
   // A fresh schedule: same league, new order of opponents each season.
   const order = [...off.league.teams];
@@ -947,6 +968,9 @@ function newSeason(s: UniverseState): UniverseState {
     [order[i], order[j]] = [order[j], order[i]];
   }
   const notable = off.retired.filter((r) => (s.playerLog[r.playerId]?.length ?? 0) >= 3);
+  const relegationText = rel
+    ? `The ${rel.oldTeam.city} ${rel.oldTeam.name} finished last and have been relegated out of existence. The ${rel.newTeam.city} ${rel.newTeam.name} take their place with a brand-new roster.`
+    : null;
   const retireNews = off.retired.length ? [`${off.retired.length} player${off.retired.length === 1 ? '' : 's'} retired this offseason; rookies take their places.`] : [];
 
   let next: UniverseState = {
@@ -972,10 +996,18 @@ function newSeason(s: UniverseState): UniverseState {
     statsBySeason: { ...s.statsBySeason, [s.season]: s.seasonStats },
     playerLog,
     coins: s.coins + DAILY_STIPEND,
-    weird: { ...expireMods(s.weird, season, 1), playerStatus, playerMods: { ...expireMods(s.weird, season, 1).playerMods, ...bornWith(s.settings.seed, off.retired.map((r) => r.rookieId)) } },
-    news: withNews({ ...s, season }, [`Season ${season} begins!`, ...retireNews], 1),
+    weird: {
+      ...expireMods(s.weird, season, 1),
+      playerStatus,
+      playerMods: { ...expireMods(s.weird, season, 1).playerMods, ...bornWith(s.settings.seed, [...off.retired.map((r) => r.rookieId), ...(rel?.added ?? [])]) },
+      stadiums: rel ? { ...s.weird.stadiums, [rel.newTeam.id]: { ...createStadiums(`${s.settings.seed}:${season}`, { ...off.league, teams: [rel.newTeam] })[rel.newTeam.id], rebuilt: season } } : s.weird.stadiums,
+    },
+    // A new franchise starts with a clean head-to-head record.
+    h2h: rel ? withoutTeam(s.h2h ?? {}, rel.newTeam.id) : s.h2h,
+    news: withNews({ ...s, season }, [`Season ${season} begins!`, ...(relegationText ? [relegationText] : []), ...retireNews], 1),
     timeline: [
       ...s.timeline,
+      ...(relegationText ? [{ season, day: 1, kind: 'relegation' as const, text: relegationText }] : []),
       ...notable.map((r) => ({ season, day: 1, kind: 'retirement' as const, text: `${s.league.players[r.playerId].name} retired at ${r.age}.` })),
     ],
   };

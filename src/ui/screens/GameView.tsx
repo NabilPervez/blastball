@@ -45,8 +45,8 @@ export function GameView({ gameId }: { gameId: string }) {
         return;
       }
       setEvents(evts);
-      const ticker = useGame.getState().live;
-      setShown(startedPlayed.current || !playable ? evts.length : ticker?.gameId === gameId ? ticker.shown : 1);
+      const { live: ticker, running } = useGame.getState();
+      setShown(startedPlayed.current || !playable ? evts.length : running[gameId]?.shown ?? (ticker?.gameId === gameId ? ticker.shown : 1));
     });
     return () => {
       live = false;
@@ -61,6 +61,13 @@ export function GameView({ gameId }: { gameId: string }) {
     const t = setTimeout(() => setShown((n) => Math.min(n + 1, total)), speed);
     return () => clearTimeout(t);
   }, [events, shown, done, paused, speed, total]);
+
+  // Keep the game's progress in the store so it carries on in the background (and on the Games
+  // list) after the player leaves this screen.
+  const setProgress = useGame((s) => s.setProgress);
+  useEffect(() => {
+    if (events && playable && !alreadyPlayed && !done) setProgress(gameId, events, shown);
+  }, [events, playable, alreadyPlayed, done, gameId, shown, setProgress]);
 
   // Record the result once the player has seen the final out.
   useEffect(() => {

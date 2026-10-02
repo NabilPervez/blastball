@@ -2,7 +2,7 @@ import { createRng, type Rng } from './rng';
 import type { Bases, GameEvent, GameResult, Half, HitKind, League, OutKind, Player, ScheduledGame, Team } from './types';
 
 /** Bump when a change would alter simulated outcomes for the same seed. */
-export const ENGINE_VERSION = 1;
+export const ENGINE_VERSION = 2;
 
 const MAX_INNINGS = 30; // safety valve; extra-inning ghost runners make this practically unreachable
 
@@ -17,9 +17,23 @@ export function startingPitcher(team: Team, day: number): string {
   return team.rotation[(day - 1) % team.rotation.length];
 }
 
+/** A fielder's throwing arm: Velocity nudges their defense (±10 at the extremes). */
+const armBonus = (velocity: number) => Math.trunc((velocity - 50) / 5);
+
 function teamDefense(league: League, team: Team): number {
-  const total = team.lineup.reduce((sum, id) => sum + league.players[id].ratings.defense, 0);
+  const total = team.lineup.reduce((sum, id) => {
+    const r = league.players[id].ratings;
+    return sum + r.defense + armBonus(r.velocity);
+  }, 0);
   return Math.floor(total / team.lineup.length);
+}
+
+/**
+ * Pitching ratings matter a little at the plate too: Control is a batter's eye (adds to
+ * Discipline) and Stuff is bat wizardry (adds to Power), each ±10 at the extremes.
+ */
+export function batterView(r: Player['ratings']): Player['ratings'] {
+  return { ...r, discipline: r.discipline + Math.trunc((r.control - 50) / 5), power: r.power + Math.trunc((r.stuff - 50) / 5) };
 }
 
 type EmitPayload = { kind: GameEvent['kind'] } & Record<string, unknown>;
@@ -145,7 +159,7 @@ export function simulateGame(league: League, game: ScheduledGame, seasonId = 1):
     const batterId = team.lineup[order[side] % team.lineup.length];
     order[side] += 1;
     const pitcherId = pitchers[fieldingSide()];
-    const b = p(batterId).ratings;
+    const b = batterView(p(batterId).ratings);
     const pr = p(pitcherId).ratings;
     s.balls = 0;
     s.strikes = 0;

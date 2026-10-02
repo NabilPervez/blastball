@@ -33,6 +33,8 @@ export interface SeasonRecord {
   championId: string | null;
   mvpId: string | null;
   aceId: string | null;
+  /** Team names as they were that season (a relegated team's slot is later reused). */
+  teamNames?: Record<string, string>;
 }
 
 export const isPlayoffGame = (gameId: string) => gameId.startsWith('p');

@@ -3,8 +3,9 @@ import type { ScheduledGame } from '../../engine/types';
 import { betsThisSeason, gamesOn, isSeasonOver, lastScheduledDay, seasonDays, unplayedToday } from '../../world/universe';
 import { formatMult } from '../../engine/odds';
 import { BetPanel, MassBet } from '../components/BetPanel';
-import { TeamBadge } from '../components/bits';
+import { BaseDiamond, Outs, TeamBadge } from '../components/bits';
 import { useGame } from '../store';
+import { describeEvent } from '../../narrative/playByPlay';
 import { GameView } from './GameView';
 
 export function GameCard({ game }: { game: ScheduledGame }) {
@@ -17,24 +18,50 @@ export function GameCard({ game }: { game: ScheduledGame }) {
   const today = game.day === u.currentDay;
   const started = u.started.includes(game.id);
   const winner = r ? (r.homeScore > r.awayScore ? home.id : away.id) : null;
-  const row = (team: typeof away, score: number | undefined) => (
+  const row = (team: typeof away, score: number | undefined, side: 'Away' | 'Home') => (
     <div className={`gc-row ${winner === team.id ? 'won' : ''}`}>
       <TeamBadge team={team} size={28} />
       <span className="gc-name">
         <span className="city">{team.city}</span> <strong>{team.name}</strong>
       </span>
+      <span className="gc-side" title={side === 'Home' ? `Home team, at ${u.weird.stadiums[home.id]?.name ?? 'their stadium'}` : 'Visiting team'}>
+        {side.toUpperCase()}
+      </span>
       <span className="gc-score">{score ?? ''}</span>
     </div>
   );
+  // A game playing right now (Play all, the live ticker, or left mid-watch): show where it stands.
+  const running = useGame((s) => s.running[game.id]);
+  const ticker = useGame((s) => (s.live?.gameId === game.id ? s.live : null));
+  const progress = !r ? (running ?? ticker) : null;
+  const now = progress ? progress.events[Math.max(0, progress.shown - 1)] : null;
+  // The latest meaningful play (skip individual pitches), like the live ticker.
+  let playIdx = progress ? Math.max(0, progress.shown - 1) : -1;
+  while (progress && playIdx > 0 && ['ball', 'calledStrike', 'swingingStrike', 'foul', 'atBat'].includes(progress.events[playIdx].kind)) playIdx--;
   const status = r ? (r.innings > 9 ? `Final/${r.innings}` : 'Final') : today ? (started ? 'In progress ▶' : 'Watch ▶') : `Day ${game.day}`;
   const series = u.playoffs?.series.find((s) => s.games.includes(game.id));
   return (
     <div className="game-card card">
       <button className="gc-main" onClick={() => watch(game.id)} aria-label={`${away.name} at ${home.name}, ${status}`}>
-        {row(away, r?.awayScore)}
-        {row(home, r?.homeScore)}
+        {row(away, r?.awayScore ?? now?.score.away, 'Away')}
+        {row(home, r?.homeScore ?? now?.score.home, 'Home')}
+        {now && now.kind !== 'gameEnd' && (
+          <span className="gc-live" aria-label={`${now.half === 'top' ? 'Top' : 'Bottom'} of inning ${now.inning}, ${now.outs} out`}>
+            <span className="live-dot" aria-hidden="true" />
+            <span className="gc-inning">
+              {now.half === 'top' ? '▲' : '▼'}
+              {now.inning}
+            </span>
+            <BaseDiamond bases={now.bases} />
+            <span className="gc-count">
+              {now.balls}-{now.strikes}
+            </span>
+            <Outs outs={now.outs} />
+          </span>
+        )}
+        {progress && playIdx >= 0 && <span className="gc-play">{describeEvent(u.league, progress.events[playIdx], playIdx, game.id)}</span>}
         <span className={`gc-status ${!r && today ? 'live' : ''}`}>
-          {series && <span className="pill">{series.round === u.playoffs!.finalRound ? 'Final' : 'Semifinal'} · game {series.games.indexOf(game.id) + 1}</span>} {status}
+          {series && <span className="pill">{series.round === u.playoffs!.finalRound ? 'Final' : 'Semifinal'} · game {series.games.indexOf(game.id) + 1}</span>} {now?.kind === 'gameEnd' ? 'Final — recording…' : status}
         </span>
       </button>
       <BetLine game={game} betting={betting} setBetting={setBetting} />
@@ -66,7 +93,7 @@ function BetLine({ game, betting, setBetting }: { game: ScheduledGame; betting: 
   );
 }
 
-/** Next Game / Next Day / Sim 7 days / Until end of season. */
+/** Next Game / Next Day / Next week / Until end of season. */
 export function TimeControls() {
   const u = useGame((s) => s.u)!;
   const { run, busy } = useGame();
@@ -83,6 +110,8 @@ export function TimeControls() {
   }
   const remaining = unplayedToday(u).length;
   const playoffs = u.phase === 'playoffs';
+  // Weeks are days 1–7, 8–14…: sim to the first day of the next one (never past the regular season).
+  const toNextWeek = Math.min(7 - ((u.currentDay - 1) % 7), Math.max(1, seasonDays(u) + 1 - u.currentDay));
   return (
     <div className="time-controls" role="group" aria-label="Time controls">
       <button className="btn primary" disabled={busy} onClick={() => run({ type: 'nextGame' })}>
@@ -91,9 +120,11 @@ export function TimeControls() {
       <button className="btn" disabled={busy} onClick={() => run({ type: 'endDay' })}>
         {remaining ? `Finish day ${u.currentDay}` : 'Next day'}
       </button>
-      <button className="btn" disabled={busy} onClick={() => run({ type: 'simDays', count: 7 })}>
-        +7 days
-      </button>
+      {!playoffs && (
+        <button className="btn" disabled={busy} onClick={() => run({ type: 'simDays', count: toNextWeek })}>
+          Next week (day {u.currentDay + toNextWeek})
+        </button>
+      )}
       <button
         className="btn"
         disabled={busy}
@@ -104,6 +135,34 @@ export function TimeControls() {
         {playoffs ? 'To the champion' : 'To season end'}
       </button>
       {busy && <span className="muted small" role="status">Simulating…</span>}
+    </div>
+  );
+}
+
+/** Kick off every game today at once, so they can all be watched together. */
+function PlayAll() {
+  const u = useGame((s) => s.u)!;
+  const { startAll, busy } = useGame();
+  const running = useGame((s) => s.running);
+  const live = useGame((s) => s.live);
+  const [starting, setStarting] = useState(false);
+  const waiting = unplayedToday(u).filter((g) => !running[g.id] && live?.gameId !== g.id);
+  if (isSeasonOver(u) || !unplayedToday(u).length) return null;
+  const playing = unplayedToday(u).length - waiting.length;
+  return (
+    <div className="play-all">
+      <button
+        className="btn primary"
+        disabled={busy || starting || !waiting.length}
+        onClick={async () => {
+          setStarting(true);
+          await startAll();
+          setStarting(false);
+        }}
+      >
+        {waiting.length ? `▶ Play all ${waiting.length} game${waiting.length === 1 ? '' : 's'} live` : 'All games are playing'}
+      </button>
+      <span className="muted small">{playing > 0 ? `${playing} playing now · tap a game to watch it` : 'Place your bets first — betting closes once a game starts.'}</span>
     </div>
   );
 }
@@ -144,6 +203,7 @@ export function Games() {
           <GameCard key={g.id} game={g} />
         ))}
       </div>
+      {day === u.currentDay && <PlayAll />}
       {day === u.currentDay && <MassBet />}
       {day === u.currentDay && <TimeControls />}
     </section>

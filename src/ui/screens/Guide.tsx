@@ -9,7 +9,9 @@ import { MAX_BACKED, MAX_FADED, PICK_RATES } from '../../world/picks';
 import { BAILOUT_COINS, DAILY_STIPEND, FAVORITE_WIN_BONUS, PATRON_BLESSING, PATRON_COST, PATRON_FROM_SEASON, RULES, STARTING_COINS } from '../../world/universe';
 import { BACKUP_EVERY_DAYS } from '../components/TimeBits';
 import { useGame } from '../store';
-import { RIVAL_MIN_GAMES } from '../../world/teams';
+import { RIVAL_MIN_GAMES, TEAM_PERKS } from '../../world/teams';
+import { GROUP_HELP, RATING_HELP, describeDelta } from '../../world/statHelp';
+import type { RatingKey } from '../../engine/types';
 
 type Status = 'live' | 'soon';
 
@@ -23,6 +25,7 @@ const SECTIONS = [
   ['persona', 'Fan personas'],
   ['picks', 'Favorite team & player picks'],
   ['vote', 'Elections & factions'],
+  ['stats', 'What the ratings do'],
   ['weird', 'Weirdness'],
   ['death', 'Death & the Departed'],
   ['seasons', 'Seasons, playoffs & aging'],
@@ -131,13 +134,13 @@ export function Guide() {
           <strong>Living</strong> (default): one in-game day passes every 15 minutes, 30 minutes, 1 hour, 4 hours or 1 real day — your choice, changeable any time in Settings. The league keeps playing while the app is closed. When you return it catches up on up to {MAX_CATCHUP_DAYS} missed days; after a week away it pauses and waits for you.
         </p>
         <p>
-          <strong>Manual</strong>: time only moves when you press a control — <em>Next game</em>, <em>Finish day</em>, <em>+7 days</em>, or <em>To season end</em>.
+          <strong>Manual</strong>: time only moves when you press a control — <em>Next game</em>, <em>Finish day</em>, <em>Next week</em>, or <em>To season end</em>.
         </p>
       </Section>
 
       <Section id="watch" title="Watching games">
         <p>
-          <strong>Now playing</strong>: today's games play live, one after another, in a bar at the top of every screen — score, inning, bases, outs and the latest play. Tap it to watch the full feed, or pause it with ❚❚.
+          <strong>Now playing</strong>: games you start (open one, or press <em>Play all</em> on Games) play live in a bar at the top of every screen. It shows the score, inning, bases, outs and the latest play. Nothing starts on its own, so you can bet first. Tap it to watch the full feed, or pause it with ❚❚.
         </p>
         <p>Open any of today's games to watch it pitch by pitch, with a scoreboard, the bases, the count and outs. Choose Live, 2× or 5× speed, pause, or jump to the final with Instant.</p>
         <p>Play-by-play is kept for the last 7 days. <strong>Pin</strong> a finished game to keep its feed forever — find pinned games in History.</p>
@@ -247,11 +250,36 @@ export function Guide() {
         <p>
           After the regular season the top four teams (top two in a 4-team league) play for the <strong>Blastball Cup</strong>: semifinals are best of {SEMIS_BEST_OF}, the final best of {FINAL_BEST_OF}. Playoff games don't count in the standings. The season's MVP and Ace (best pitcher) are named at the end.
         </p>
+        <p><strong>Relegation:</strong> the team that finishes last in the regular season is dissolved. A brand-new franchise — new city, name, colors and a whole new roster — takes its place next season. The old players' stats stay in the record books.</p>
         <p>Then comes a one-day offseason. Everyone ages a year. Careers have an arc: players are <em>Rising</em> until 26, in their <em>Prime</em> from 27 to 30, then <em>Fading</em> and finally in their <em>Twilight</em> before they retire, replaced by rookies. A new league starts mid-history, so most players already have a few seasons behind them. A new schedule is drawn and Season N+1 begins.</p>
       </Section>
 
+      <Section id="stats" title="What the ratings do">
+        <p>Every player has eight hidden ratings from 0 to 100. Cards show them as stars (0–5). Traits, team perks, stadiums, rivalries and Patron blessings all add to these numbers on game day — the game engine only ever sees the final ratings. Hover or tap a rating on a player's page for a reminder.</p>
+        <dl className="guide-stats">
+          {(Object.keys(RATING_HELP) as RatingKey[]).map((k) => (
+            <div key={k}>
+              <dt>
+                {RATING_HELP[k].label} <span className="muted small">· {RATING_HELP[k].who}</span>
+              </dt>
+              <dd>{RATING_HELP[k].text}</dd>
+            </div>
+          ))}
+        </dl>
+        <p className="small">{GROUP_HELP.batting} {GROUP_HELP.pitching} {GROUP_HELP.baserunning} {GROUP_HELP.defense}</p>
+        <p className="small muted">Batters use all eight ratings — their pitching ratings count a little (arm, eye, bat). A pitcher's batting, speed and defense ratings never come up, so a trait that only boosts those does nothing for a pitcher.</p>
+      </Section>
+
       <Section id="teams" title="Teams & rivalries">
-        <p>Every team has a short history, a motto, and one <strong>team perk</strong> no other team has — a small ratings boost like Sticky Gloves (+5 defense) or Home Cooking (stronger at home).</p>
+        <p>Every team has a short history, a motto, and one <strong>team perk</strong> no other team has — a ratings boost for every player on the roster:</p>
+        <ul className="small">
+          {TEAM_PERKS.map((p) => (
+            <li key={p.id}>
+              {p.icon} <strong>{p.name}</strong> — {describeDelta(p.delta)}
+              {p.homeOnly ? ' (home games only)' : ''}
+            </li>
+          ))}
+        </ul>
         <p>
           A team's page keeps its all-time record and head-to-head results against every opponent. Teams that meet {RIVAL_MIN_GAMES}+ times with a close record become <strong>rivals</strong>: both sides play harder (+3 contact, power, velocity and stuff) whenever they meet.
         </p>

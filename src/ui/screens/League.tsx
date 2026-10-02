@@ -4,13 +4,14 @@ import type { Player, RatingKey } from '../../engine/types';
 import { analystReveal } from '../../world/persona';
 import { flavorOf } from '../../world/rarity';
 import { standingsOf, type UniverseState } from '../../world/universe';
-import { TeamBadge } from '../components/bits';
+import { TeamBadge, Tip } from '../components/bits';
+import { describeDelta, RATING_HELP } from '../../world/statHelp';
 import { cardPropsFor, PlayerCard } from '../components/PlayerCard';
 import { ModList, playerModsOf, stadiumModsOf } from '../components/Mods';
 import { PatronPanel } from '../components/SeasonBits';
 import { Leaders, PickButtons } from '../components/FanFeatures';
 import { useGame } from '../store';
-import { allTimeRecord, isRivalry, RIVAL_MIN_GAMES, rivalsOf, teamBio, teamPerk, winsVs } from '../../world/teams';
+import { allTimeRecord, isRivalry, RIVAL_MIN_GAMES, rivalsOf, stadiumDetails, stadiumPerk, teamBio, teamPerk, winsVs } from '../../world/teams';
 import { tierOf } from '../../world/rarity';
 import { LinkedText } from '../components/LinkedText';
 
@@ -98,6 +99,70 @@ function HallOfTheDeparted({ u }: { u: UniverseState }) {
               extra={<span className="muted small">Season {d.season}, day {d.day}</span>}
             />
           ))}
+        </div>
+      )}
+    </>
+  );
+}
+
+/** Overall rating used to rank players: the ratings that matter for their role, with batters' pitching ratings at a fifth. */
+export function overall(p: Player): number {
+  const r = p.ratings;
+  if (p.role === 'pitcher') return Math.round((r.velocity + r.control + r.stuff) / 3);
+  return Math.round((r.contact + r.power + r.discipline + r.speed + r.defense + (r.velocity + r.control + r.stuff) / 5) / 5.6);
+}
+
+function TopPlayers({ u }: { u: UniverseState }) {
+  const showDetail = useGame((s) => s.showDetail);
+  const top = u.league.teams
+    .flatMap((t) => [...t.lineup, ...t.rotation])
+    .map((id) => u.league.players[id])
+    .sort((a, b) => overall(b) - overall(a) || a.name.localeCompare(b.name))
+    .slice(0, 10);
+  return (
+    <>
+      <h2>Top 10 players</h2>
+      <p className="muted small">The best active players in the league by base ratings (traits and perks not included).</p>
+      <div className="card-grid">
+        {top.map((p, i) => (
+          <PlayerCard
+            key={p.id}
+            {...cardPropsFor(u, p.id)}
+            onOpen={() => showDetail({ kind: 'player', id: p.id })}
+            extra={
+              <span className="small top-rank">
+                <strong>#{i + 1}</strong> · overall {overall(p)}
+              </span>
+            }
+          />
+        ))}
+      </div>
+    </>
+  );
+}
+
+function Trophies({ u, teamId }: { u: UniverseState; teamId: string }) {
+  const team = teamOf(u, teamId);
+  // Only titles won under this franchise's name (a relegated slot's old titles belong to the old team).
+  const wins = u.archive.filter((a) => a.championId === teamId && (!a.teamNames || a.teamNames[teamId] === team.name));
+  return (
+    <>
+      <h2>Trophy case</h2>
+      {wins.length === 0 ? (
+        <p className="muted small">No Blastball Cups yet. Someday.</p>
+      ) : (
+        <div className="trophy-case">
+          {wins.map((a) => {
+            const rec = a.standings.find((r) => r.teamId === teamId);
+            return (
+              <div key={a.season} className="card trophy">
+                <span className="trophy-icon" aria-hidden="true">🏆</span>
+                <strong className="display">Season {a.season}</strong>
+                <span className="muted small">Blastball Cup{rec ? ` · ${rec.wins}–${rec.losses}` : ''}</span>
+                {a.mvpId && u.league.players[a.mvpId]?.teamId === teamId && <span className="small">MVP: {u.league.players[a.mvpId].name}</span>}
+              </div>
+            );
+          })}
         </div>
       )}
     </>
@@ -293,6 +358,10 @@ function TeamPage({ u, teamId }: { u: UniverseState; teamId: string }) {
           <span className="eyebrow">Team perk</span>
           <br />
           <strong>{perk.name}</strong> <span className="muted small">— {perk.description} Only the {team.name} get this.</span>
+          <br />
+          <span className="small">
+            {describeDelta(perk.delta)} for every player, {perk.homeOnly ? 'in home games only' : 'in every game'}. Rivals also get +3 Contact, Power, Velocity and Stuff when they meet.
+          </span>
         </span>
       </div>
       {rivals.length > 0 && (
@@ -310,6 +379,7 @@ function TeamPage({ u, teamId }: { u: UniverseState; teamId: string }) {
         </p>
       )}
       <TeamRecord u={u} teamId={teamId} />
+      <Trophies u={u} teamId={teamId} />
       <PatronPanel teamId={teamId} />
       <h2>Lineup</h2>
       {grid(team.lineup)}
@@ -325,6 +395,24 @@ function TeamPage({ u, teamId }: { u: UniverseState; teamId: string }) {
       <h2>Home stadium</h2>
       <div className="card pad stack">
         <strong className="display">{u.weird.stadiums[teamId]?.name ?? 'Unknown grounds'}</strong>
+        {(() => {
+          const st = u.weird.stadiums[teamId];
+          const d = stadiumDetails(u.settings.seed, teamId, st?.name ?? '');
+          const sp = stadiumPerk(u.settings.seed, u.league, teamId, st?.rebuilt);
+          return (
+            <>
+              <p className="muted small">
+                Opened {st?.rebuilt ? `for Season ${st.rebuilt}` : d.opened} · {d.capacity.toLocaleString()} seats · {d.surface} · {d.roof} · {d.fence} ft to center
+              </p>
+              <p className="stadium-perk">
+                <span aria-hidden="true">{sp.icon}</span> <strong>{sp.name}</strong> <span className="muted small">— {sp.description}</span>
+                <br />
+                <span className="small mod-effect">{describeDelta(sp.delta)} for the {team.name} in home games.</span>
+              </p>
+            </>
+          );
+        })()}
+        <span className="eyebrow">Current stadium effects</span>
         <ModList mods={stadiumModsOf(u, teamId)} currentDay={u.currentDay} />
       </div>
     </section>
@@ -432,18 +520,26 @@ const RATING_ROWS: [RatingKey, string][] = [
   ['defense', 'Defense'],
 ];
 
-/** Base ratings next to what the player's traits turn them into. */
+const USED_BY: Record<'batter' | 'pitcher', RatingKey[]> = {
+  batter: ['contact', 'power', 'discipline', 'speed', 'defense', 'velocity', 'control', 'stuff'],
+  pitcher: ['velocity', 'control', 'stuff'],
+};
+
+/** Base ratings next to what traits and the team perk turn them into in games. */
 function RatingsTable({ u, player }: { u: UniverseState; player: Player }) {
   const mods = playerModsOf(u, player.id);
-  const delta = (k: RatingKey) => mods.reduce((sum, m) => sum + (m.def.delta[k] ?? 0), 0);
+  const perk = teamPerk(u.settings.seed, u.league, player.teamId);
+  const retired = ['retired', 'departed'].includes(u.weird.playerStatus[player.id] ?? '');
+  const perkDelta = (k: RatingKey) => (retired || perk.homeOnly ? 0 : (perk.delta[k] ?? 0));
+  const delta = (k: RatingKey) => mods.reduce((sum, m) => sum + (m.def.delta[k] ?? 0), 0) + perkDelta(k);
   return (
-    <div className="card table-wrap">
+    <div className="card">
       <table className="stat-table ratings-table">
         <thead>
           <tr>
             <th scope="col">Rating</th>
             <th scope="col">Base</th>
-            <th scope="col">With traits</th>
+            <th scope="col">In games</th>
           </tr>
         </thead>
         <tbody>
@@ -451,8 +547,11 @@ function RatingsTable({ u, player }: { u: UniverseState; player: Player }) {
             const d = delta(k);
             const now = Math.max(0, Math.min(100, player.ratings[k] + d));
             return (
-              <tr key={k}>
-                <th scope="row">{label}</th>
+              <tr key={k} className={USED_BY[player.role].includes(k) ? '' : 'unused'}>
+                <th scope="row">
+                  <Tip text={`${RATING_HELP[k].who}: ${RATING_HELP[k].text}`}>{label}</Tip>
+                  {!USED_BY[player.role].includes(k) && <span className="muted small"> · unused</span>}
+                </th>
                 <td>{player.ratings[k]}</td>
                 <td className={d > 0 ? 'up' : d < 0 ? 'down' : ''}>
                   {now}
@@ -463,6 +562,9 @@ function RatingsTable({ u, player }: { u: UniverseState; player: Player }) {
           })}
         </tbody>
       </table>
+      <p className="muted small ratings-note">
+        “In games” adds active traits{retired ? '' : ` and the ${perk.name} team perk${perk.homeOnly ? ` (home games only: ${describeDelta(perk.delta)})` : ''}`}. Stadium effects, rivalries and Patron blessings are added on game day. Ratings marked unused don’t affect games for a {player.role}. Tap a rating to see what it does.
+      </p>
     </div>
   );
 }
@@ -507,7 +609,7 @@ function PlayerPage({ u, playerId }: { u: UniverseState; playerId: string }) {
           <CollectButton u={u} playerId={playerId} />
           {u.persona && !['departed', 'retired'].includes(u.weird.playerStatus[playerId] ?? '') && <PickButtons player={player} />}
           <h2>Traits</h2>
-          <ModList mods={playerModsOf(u, playerId)} currentDay={u.currentDay} />
+          <ModList mods={playerModsOf(u, playerId)} currentDay={u.currentDay} role={player.role} />
           <h2>Ratings</h2>
           <RatingsTable u={u} player={player} />
           <h2>Stats</h2>
@@ -540,6 +642,7 @@ export function League() {
       <h2>Standings</h2>
       <Standings u={u} />
       <Leaders />
+      <TopPlayers u={u} />
       <HallOfTheDeparted u={u} />
       <h2>Teams</h2>
       <div className="team-tiles">

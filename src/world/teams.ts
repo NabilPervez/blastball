@@ -47,6 +47,55 @@ export function teamPerk(seed: string, league: League, teamId: string): TeamPerk
   return order[idx % order.length];
 }
 
+/** Every home stadium has its own permanent edge, enjoyed by the home team in home games. */
+export const STADIUM_PERKS: TeamPerk[] = [
+  { id: 'short-porch', name: 'Short Porch', icon: '📏', description: 'The right-field wall is suspiciously close.', delta: { power: 5 }, homeOnly: true },
+  { id: 'deep-alleys', name: 'Deep Alleys', icon: '🏟', description: 'Gaps you could park a bus in.', delta: { speed: 4, contact: 2 }, homeOnly: true },
+  { id: 'thin-air', name: 'Thin Air', icon: '⛰', description: 'Built on a plateau. The ball just keeps going.', delta: { power: 3, contact: 3 }, homeOnly: true },
+  { id: 'fog-bank', name: 'Fog Bank', icon: '🌫', description: 'Visitors lose the ball in the mist; the locals don’t.', delta: { defense: 5 }, homeOnly: true },
+  { id: 'tall-mound', name: 'Tall Mound', icon: '🗻', description: 'The mound is a bit higher than the rules allow.', delta: { velocity: 5 }, homeOnly: true },
+  { id: 'crooked-lights', name: 'Crooked Lights', icon: '💡', description: 'Shadows fall exactly where the home pitchers want them.', delta: { stuff: 5 }, homeOnly: true },
+  { id: 'quiet-crowd', name: 'Library Crowd', icon: '🤫', description: 'Total silence. Perfect for concentrating.', delta: { control: 4, discipline: 3 }, homeOnly: true },
+  { id: 'fast-turf', name: 'Fast Turf', icon: '🟩', description: 'Grounders skip like stones on a pond.', delta: { speed: 3, defense: 3 }, homeOnly: true },
+  { id: 'wind-tunnel', name: 'Wind Tunnel', icon: '🌬', description: 'The wind always blows out — when the home team bats.', delta: { power: 4, discipline: 2 }, homeOnly: true },
+  { id: 'echo-chamber', name: 'Echo Chamber', icon: '📣', description: 'The cheering never stops bouncing around.', delta: { contact: 4 }, homeOnly: true },
+  { id: 'old-grass', name: 'Ancient Grass', icon: '🌿', description: 'The groundskeeper talks to it. It listens.', delta: { defense: 3, control: 3 }, homeOnly: true },
+  { id: 'heated-benches', name: 'Heated Benches', icon: '🔥', description: 'Warm muscles, loud bats.', delta: { contact: 2, power: 2, velocity: 2 }, homeOnly: true },
+  { id: 'hall-of-mirrors', name: 'Hall of Mirrors', icon: '🪞', description: 'The batter’s eye is a mirror. Nobody knows why it’s allowed.', delta: { stuff: 3, velocity: 3 }, homeOnly: true },
+  { id: 'lucky-dirt', name: 'Lucky Dirt', icon: '🍀', description: 'Soil from a four-leaf-clover farm.', delta: { contact: 2, defense: 2, speed: 2 }, homeOnly: true },
+  { id: 'night-market', name: 'Night Market', icon: '🏮', description: 'The concourse food is so good the home team plays inspired.', delta: { discipline: 3, contact: 3 }, homeOnly: true },
+  { id: 'iron-backstop', name: 'Iron Backstop', icon: '🧱', description: 'Nothing gets by. Ever.', delta: { control: 5 }, homeOnly: true },
+];
+
+/** The home stadium's perk; distinct across the league. A new stadium (after relegation) draws a new one. */
+export function stadiumPerk(seed: string, league: League, teamId: string, rebuilt?: number): TeamPerk {
+  const order = [...STADIUM_PERKS];
+  const rng = createRng(seed, 'stadium-perks');
+  for (let i = order.length - 1; i > 0; i--) {
+    const j = rng.int(i + 1);
+    [order[i], order[j]] = [order[j], order[i]];
+  }
+  const idx = league.teams.findIndex((t) => t.id === teamId);
+  // Relegated slots get a new stadium: shift by a hash of its name so the perk changes too.
+  const shift = rebuilt ? createRng(seed, 'rebuilt', teamId, rebuilt).int(order.length) : 0;
+  return order[(idx + shift) % order.length];
+}
+
+const SURFACES = ['natural grass', 'ancient grass', 'artificial turf', 'packed clay', 'moss', 'blue fescue', 'sand-and-ash'];
+const ROOFS = ['open-air', 'retractable roof', 'domed', 'half-roofed', 'open to the stars'];
+
+/** Seeded stadium facts: capacity, year it opened, surface and roof. */
+export function stadiumDetails(seed: string, teamId: string, stadiumName: string): { capacity: number; opened: number; surface: string; roof: string; fence: number } {
+  const rng = createRng(seed, 'stadium-details', teamId, stadiumName);
+  return {
+    capacity: rng.range(18, 52) * 1000 + rng.range(0, 9) * 100,
+    opened: rng.range(1890, 2024),
+    surface: rng.pick(SURFACES),
+    roof: rng.pick(ROOFS),
+    fence: rng.range(310, 420),
+  };
+}
+
 const ORIGINS = [
   'a bet between two lighthouse keepers',
   'a riot at a pie-eating contest',

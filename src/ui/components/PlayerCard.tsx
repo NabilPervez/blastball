@@ -7,6 +7,7 @@ import { careerPhase, PHASE_LABEL } from '../../world/seasons';
 import type { UniverseState } from '../../world/universe';
 import { Stars } from './bits';
 import { playerModsOf, type ShownMod } from './Mods';
+import { deltaNote, describeDelta, GROUP_HELP } from '../../world/statHelp';
 
 const ordinal = (n: number) => `${n}${[11, 12, 13].includes(n % 100) ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'}`;
 
@@ -96,13 +97,13 @@ interface CardProps {
 }
 
 /** Trait chips: named, so a card says who the player is at a glance. */
-function Traits({ mods, max }: { mods: ShownMod[]; max: number }) {
+function Traits({ mods, max, role }: { mods: ShownMod[]; max: number; role: 'batter' | 'pitcher' }) {
   if (!mods.length) return null;
   const shown = mods.slice(0, max);
   return (
     <span className="pc-traits">
       {shown.map((m) => (
-        <span key={m.def.id} className={`pc-trait ${m.def.comboOnly ? 'combo' : ''}`} title={`${m.def.name}: ${m.def.description}`}>
+        <span key={m.def.id} className={`pc-trait ${m.def.comboOnly ? 'combo' : ''}`} title={[`${m.def.name}: ${m.def.description}`, describeDelta(m.def.delta), deltaNote(m.def.delta, role)].filter(Boolean).join(' ')}>
           <span aria-hidden="true">{m.def.icon}</span> {m.def.name}
         </span>
       ))}
@@ -139,10 +140,10 @@ export function PlayerCard({ player, team, rarity, tier = 'common', career, coll
           <strong>{RARITY_LABEL[rarity]}</strong>
           {career && ` · ${career}`}
         </span>
-        <Traits mods={mods} max={size === 'lg' ? 8 : 2} />
+        <Traits mods={mods} max={size === 'lg' ? 8 : 2} role={player.role} />
         <div className="pc-stars">
           {groups.map(([g, label]) => (
-            <span key={g} className="pc-star-row">
+            <span key={g} className="pc-star-row" title={GROUP_HELP[g]}>
               <span className="pc-star-label">{label}</span>
               <Stars value={stars(player, g)} label={label} />
             </span>
