@@ -3,6 +3,8 @@ import { marginalCost, playerVoteTotal, tally, winnerOf, type Election } from '.
 import { ORGANIZER_DISCOUNT_PCT } from '../../world/elections';
 import { currentElection, voteError, type UniverseState } from '../../world/universe';
 import { TeamBadge } from '../components/bits';
+import { NAMED_AFTER_VOTES, opinionLabel } from '../../world/factionNews';
+import { lifetimeVotes } from '../../world/universe';
 import { useGame } from '../store';
 
 function ProposalCard({ u, e, index }: { u: UniverseState; e: Election; index: number }) {
@@ -101,14 +103,18 @@ export function NewsFeed({ limit = 8 }: { limit?: number }) {
   if (!items.length) return null;
   return (
     <ul className="card news">
-      {items.map((n, i) => (
-        <li key={i}>
-          <span className="muted small">
-            Season {n.season} · Day {n.day}
-          </span>
-          <span>{n.text}</span>
-        </li>
-      ))}
+      {items.map((n, i) => {
+        const faction = n.factionId ? u.factions.find((f) => f.id === n.factionId) : null;
+        return (
+          <li key={i} className={faction ? `faction-news f-${faction.id}` : ''}>
+            <span className="muted small">
+              Season {n.season} · Day {n.day}
+              {faction && <span className="faction-tag">{faction.name}</span>}
+            </span>
+            <span>{n.text}</span>
+          </li>
+        );
+      })}
     </ul>
   );
 }
@@ -157,11 +163,24 @@ export function Vote() {
       <PastElections u={u} />
 
       <h2>The factions</h2>
+      <p className="muted small">
+        Factions warm to you when you vote their way and cool when you don't.{' '}
+        {lifetimeVotes(u) < NAMED_AFTER_VOTES
+          ? `Cast ${NAMED_AFTER_VOTES - lifetimeVotes(u)} more votes and they'll start talking about you by name.`
+          : "You're famous now — they talk about you by name."}
+      </p>
       <div className="faction-grid">
         {u.factions.map((f) => (
           <div key={f.id} className="card pad faction">
             <strong className="display">{f.name}</strong>
             <p className="muted small">{f.ideology}</p>
+            <p className={`small opinion o-${Math.sign(u.factionOpinion[f.id] ?? 0)}`}>
+              {opinionLabel(u.factionOpinion[f.id] ?? 0)}
+              <span className="sr-only"> (score {u.factionOpinion[f.id] ?? 0})</span>
+              <span className="opinion-meter" aria-hidden="true">
+                <span style={{ left: `${(((u.factionOpinion[f.id] ?? 0) + 5) / 10) * 100}%` }} />
+              </span>
+            </p>
             <p className="small faction-favs">
               Favorite{f.favoriteTeams.length > 1 ? 's' : ''}:{' '}
               {f.favoriteTeams.map((id) => (

@@ -6,6 +6,7 @@ import type { GameEvent, League, ScheduledGame } from '../engine/types';
 import type { Clock, DayLengthMinutes } from './clock';
 import { applyEffect, marginalCost, openElection, playerVoteTotal, tally, winnerOf, type Election } from './elections';
 import { createFactions, type Faction } from './factions';
+import { reactToChampion, reactToDeath, reactToElection, reactToPatron, reactToReturn, type FactionNews, type FanContext } from './factionNews';
 import { generateLeague } from './generate';
 import { personaMultiplier, winningPayout, type Persona } from './persona';
 import { advancePlayoffs, initialAge, isPlayoffGame, rookieAge, runOffseason, seasonAwards, startPlayoffs, type Phase, type Playoffs, type SeasonRecord } from './seasons';
@@ -20,7 +21,7 @@ export const RULES = mergePacks(DEFAULT_PACKS);
  * `reduce(state, event)`, so the same events always produce the same state.
  */
 
-export const SAVE_VERSION = 6;
+export const SAVE_VERSION = 7;
 
 /** Patron tier (PRD §8): unlocked from Season 2. */
 export const PATRON_COST = 150;
@@ -137,12 +138,16 @@ export interface UniverseState {
   archive: SeasonRecord[];
   /** Finished seasons' stat lines: season → player → line. */
   statsBySeason: Record<number, Record<string, StatLine>>;
+  /** Each faction's opinion of the player, -5..5. */
+  factionOpinion: Record<string, number>;
 }
 
 export interface NewsItem {
   season: number;
   day: number;
   text: string;
+  /** Set when a faction is talking. */
+  factionId?: string;
 }
 
 export type WorldEvent =
@@ -193,6 +198,7 @@ export function createUniverse(id: string, settings: UniverseSettings, now: numb
     patron: null,
     archive: [],
     statsBySeason: {},
+    factionOpinion: {},
   };
   return withNewElection(base, 1);
 }
@@ -276,6 +282,12 @@ const NEWS_KEPT = 120;
 const withNews = (s: UniverseState, texts: string[], day = s.currentDay): NewsItem[] =>
   [...s.news, ...texts.map((text) => ({ season: s.season, day, text }))].slice(-NEWS_KEPT);
 
+const withFactionNews = (s: UniverseState, items: FactionNews[], day = s.currentDay): NewsItem[] =>
+  [...s.news, ...items.map((n) => ({ season: s.season, day, text: n.text, factionId: n.factionId }))].slice(-NEWS_KEPT);
+
+export const lifetimeVotes = (s: UniverseState) => s.elections.reduce((sum, e) => sum + e.playerVotes.reduce((a, b) => a + b, 0), 0);
+const fanContext = (s: UniverseState): FanContext => ({ persona: s.persona, lifetimeVotes: lifetimeVotes(s), opinion: s.factionOpinion });
+
 const withTimeline = (s: UniverseState, kind: TimelineKind, text: string, day = s.currentDay): TimelineEntry[] => [...s.timeline, { season: s.season, day, kind, text }];
 
 /** The election currently accepting votes, if any. */
@@ -358,7 +370,14 @@ function resolveElection(s: UniverseState, e: Election, day: number): UniverseSt
   const elections = s.elections.map((x) => (x.id === e.id ? { ...x, result: { winner, totals } } : x));
   let timeline = withTimeline(s, 'election', headlines[0], day);
   if (proposal.effect.kind === 'resurrect') timeline = [...timeline, { season: s.season, day, kind: 'return', text: headlines[1] }];
-  return { ...s, league, weird, playerLog, elections, timeline, news: withNews(s, headlines, day) };
+  const swung = playerVoteTotal(e) > 0 && winnerOf(tally({ ...e, playerVotes: e.playerVotes.map(() => 0) })) !== winner;
+  const reaction = reactToElection(s.factions, e, winner, swung, fanContext(s), s.settings.seed);
+  let next: UniverseState = { ...s, league, weird, playerLog, elections, timeline, factionOpinion: reaction.opinion, news: withNews(s, headlines, day) };
+  next = { ...next, news: withFactionNews(next, reaction.news, day) };
+  if (proposal.effect.kind === 'resurrect') {
+    next = { ...next, news: withFactionNews(next, reactToReturn(s.factions, league.players[proposal.effect.playerId].name, s.settings.seed, s.season, day), day) };
+  }
+  return next;
 }
 
 /** Story-worthy notes for a player's life timeline, from one game's box score. */
@@ -448,13 +467,15 @@ export function reduce(state: UniverseState, event: WorldEvent): UniverseState {
       if (patronError(state, event.teamId)) return state;
       const t = state.league.teams.find((x) => x.id === event.teamId)!;
       const fan = state.persona?.fanName || 'A generous fan';
-      return {
+      const sponsored: UniverseState = {
         ...state,
         coins: state.coins - PATRON_COST,
         patron: { season: state.season, teamId: event.teamId },
         ledger: withLedger(state, -PATRON_COST, `Patron of the ${t.name}`),
         news: withNews(state, [`${fan} becomes Patron of the ${t.city} ${t.name}. The players feel blessed (+${PATRON_BLESSING} to everything this season).`]),
       };
+      const reaction = reactToPatron(state.factions, t.id, `${t.city} ${t.name}`, fanContext(state), state.settings.seed, state.season);
+      return { ...sponsored, factionOpinion: reaction.opinion, news: withFactionNews(sponsored, reaction.news) };
     }
 
     case 'weird': {
@@ -473,7 +494,13 @@ export function reduce(state: UniverseState, event: WorldEvent): UniverseState {
       const kind: TimelineKind = h.eventId === 'death' ? 'death' : 'weird';
       const ages = { ...state.ages };
       for (const c of h.changes) if (c.kind === 'death') ages[c.replacement.id] = rookieAge(c.replacement.id);
-      return { ...state, league, weird, ages, playerLog, news: withNews(state, [h.text]), timeline: withTimeline(state, kind, h.text) };
+      let next: UniverseState = { ...state, league, weird, ages, playerLog, news: withNews(state, [h.text]), timeline: withTimeline(state, kind, h.text) };
+      for (const c of h.changes) {
+        if (c.kind !== 'death') continue;
+        const t = state.league.teams.find((x) => x.id === c.teamId)!;
+        next = { ...next, news: withFactionNews(next, reactToDeath(state.factions, state.league.players[c.playerId].name, t.id, `${t.city} ${t.name}`, state.settings.seed, state.season, state.currentDay)) };
+      }
+      return next;
     }
 
     case 'votesBought': {
@@ -695,6 +722,7 @@ function continuePlayoffs(s: UniverseState, dayEnded: number): UniverseState {
       archive: [...next.archive, { season: next.season, standings: standingsOf(next).map((r) => ({ teamId: r.teamId, wins: r.wins, losses: r.losses })), championId: playoffs.championId, mvpId, aceId }],
       timeline: withTimeline(next, 'champion', `The ${champ} win the Season ${next.season} Blastball Cup. ${awards}.`, dayEnded),
     };
+    next = { ...next, news: withFactionNews(next, reactToChampion(next.factions, playoffs.championId, champ, next.settings.seed, next.season), dayEnded) };
   }
   return news.length ? { ...next, news: withNews(next, news.filter(Boolean), dayEnded) } : next;
 }

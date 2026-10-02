@@ -165,6 +165,9 @@ export function Guide() {
           Six factions — the Statheads, Loyalists, Chaos Choir, Purists, Lore Divers and Casuals — each cast {FACTION_BUDGET} votes, based only on public information and their own tastes and favorite teams. You can see how they're leaning before you vote.
         </p>
         <p>
+          Factions react in the news to elections, departures, returns, champions and Patrons. Each one keeps an <strong>opinion of you</strong> — it rises when you vote their way and falls when you don't — and once you've cast enough votes they'll start naming you in headlines.
+        </p>
+        <p>
           You buy votes with coins at a rising price: <strong>n votes cost n² coins</strong> (1, 4, 9, 16…). Saving up lets you swing a close race; no one can buy everything. Ties go to the status quo.
         </p>
       </Section>
@@ -247,9 +250,6 @@ export function Guide() {
           </li>
           <li>
             <strong>“What If?” branches</strong> — rewind to an earlier snapshot and play out a different future, nested under the original league.
-          </li>
-          <li>
-            <strong>Faction news</strong> — factions react to events and to you by name as your influence grows.
           </li>
           <li>
             <strong>Card motion</strong> — cards that tilt with your pointer or phone, with a foil sheen.

@@ -71,6 +71,8 @@ export const migrations: Record<number, Migration> = {
       bets: (save.bets as object[]).map((b) => ({ ...b, season: 1 })),
     };
   },
+  // v6 → v7: factions hold an opinion of the player.
+  6: (save) => ({ ...save, factionOpinion: {} }),
 };
 
 export function migrateSave(raw: unknown): UniverseState {

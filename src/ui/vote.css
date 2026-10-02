@@ -24,3 +24,12 @@
 .faction-favs { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .election-card { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 16px; margin: 12px 0; border-color: var(--accent); text-align: left; width: 100%; }
 .election-card p { margin: 0; }
+
+/* Faction reactions */
+.faction-tag { margin-left: 8px; padding: 1px 8px; border-radius: 999px; background: rgba(46, 139, 255, 0.12); color: var(--accent); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; }
+.news li.faction-news > span:last-child { font-style: italic; }
+.opinion { display: grid; gap: 4px; margin-top: 8px !important; }
+.opinion.o-1 { color: var(--good); }
+.opinion.o--1 { color: var(--bad); }
+.opinion-meter { position: relative; height: 6px; border-radius: 999px; background: linear-gradient(90deg, var(--bad), var(--surface-2) 50%, var(--good)); }
+.opinion-meter span { position: absolute; top: 50%; width: 12px; height: 12px; border-radius: 50%; background: var(--text); transform: translate(-50%, -50%); border: 2px solid var(--base); }

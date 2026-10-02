@@ -152,11 +152,12 @@ describe('Patron tier', () => {
 });
 
 describe('save fixtures', () => {
-  it('a real v6 save (Sprint 8, Season 2) loads unchanged and keeps playing', async () => {
+  it('a real v6 save (Sprint 8, Season 2) migrates and keeps playing', async () => {
     const { migrateSave } = await import('../src/storage/migrate');
     const raw = (await import('./fixtures/save-v6.json')).default;
     const u = migrateSave(structuredClone(raw));
-    expect(u).toEqual(raw);
+    expect({ ...u, saveVersion: raw.saveVersion, factionOpinion: undefined }).toEqual({ ...raw, factionOpinion: undefined });
+    expect(u.factionOpinion).toEqual({});
     expect(u.season).toBe(2);
     expect(u.archive).toHaveLength(1);
     expect(runCommand(u, { type: 'endDay' }).state.currentDay).toBe(u.currentDay + 1);
