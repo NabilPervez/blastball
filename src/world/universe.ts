@@ -10,9 +10,9 @@ import { reactToChampion, reactToDeath, reactToElection, reactToPatron, reactToR
 import { generateLeague } from './generate';
 import { personaMultiplier, winningPayout, type Persona } from './persona';
 import { emptyPicks, MAX_BACKED, MAX_FADED, pickOf, pickPayout, type PickKind, type Picks } from './picks';
-import { advancePlayoffs, initialAge, isPlayoffGame, rookieAge, runOffseason, seasonAwards, startPlayoffs, type Phase, type Playoffs, type SeasonRecord } from './seasons';
+import { advancePlayoffs, ageRatingOffset, initialAge, initialExperience, isPlayoffGame, rookieAge, runOffseason, seasonAwards, startPlayoffs, type Phase, type Playoffs, type SeasonRecord } from './seasons';
 import { createRng } from '../engine/rng';
-import { applyHappening, createStadiums, DEFAULT_PACKS, effectiveLeague, expireMods, mergePacks, resurrect, rollDay, type WeirdHappening, type WeirdState } from './weird';
+import { agingTraits, applyHappening, createStadiums, DEFAULT_PACKS, effectiveLeague, expireMods, mergePacks, resurrect, rollDay, type WeirdHappening, type WeirdState } from './weird';
 
 /** The active rule packs (data-driven weirdness). */
 export const RULES = mergePacks(DEFAULT_PACKS);
@@ -22,7 +22,7 @@ export const RULES = mergePacks(DEFAULT_PACKS);
  * `reduce(state, event)`, so the same events always produce the same state.
  */
 
-export const SAVE_VERSION = 8;
+export const SAVE_VERSION = 9;
 
 /** Out of coins with nothing riding? The league office tops you back up (once a day). */
 export const BAILOUT_COINS = 100;
@@ -154,6 +154,16 @@ export interface UniverseState {
   pickEarnings: number;
   /** dayCount of the last bailout, so it happens at most once a day. */
   lastBailoutDay: number;
+  /** Seasons each player had finished before the current one (0 = rookie). */
+  experience: Record<string, number>;
+  /** The fan's keepsake cards: favorite players, oldest first. No gameplay effect. */
+  collection: CollectedCard[];
+}
+
+export interface CollectedCard {
+  playerId: string;
+  season: number;
+  day: number;
 }
 
 export interface NewsItem {
@@ -177,10 +187,25 @@ export type WorldEvent =
   | { type: 'backupNoted'; day: number }
   | { type: 'patronSponsored'; teamId: string }
   | { type: 'favoriteTeamSet'; teamId: string }
-  | { type: 'pickSet'; playerId: string; kind: PickKind | null };
+  | { type: 'pickSet'; playerId: string; kind: PickKind | null }
+  | { type: 'collectionToggled'; playerId: string };
+
+/** A new league is mid-history: ratings reflect where each player is in their career arc. */
+function shapeByAge(league: League, ages: Record<string, number>): League {
+  const players = Object.fromEntries(
+    Object.values(league.players).map((p) => {
+      const d = ageRatingOffset(ages[p.id]);
+      const ratings = Object.fromEntries(Object.entries(p.ratings).map(([k, v]) => [k, Math.max(0, Math.min(100, v + d))])) as typeof p.ratings;
+      return [p.id, { ...p, ratings }];
+    }),
+  );
+  return { ...league, players };
+}
 
 export function createUniverse(id: string, settings: UniverseSettings, now: number, persona: Persona | null = null): UniverseState {
-  const league = generateLeague({ seed: settings.seed, name: settings.name, teamCount: settings.leagueSize });
+  const generated = generateLeague({ seed: settings.seed, name: settings.name, teamCount: settings.leagueSize });
+  const ages = Object.fromEntries(Object.keys(generated.players).map((id) => [id, initialAge(id)]));
+  const league = shapeByAge(generated, ages);
   const base: UniverseState = {
     saveVersion: SAVE_VERSION,
     engineVersion: ENGINE_VERSION,
@@ -209,7 +234,9 @@ export function createUniverse(id: string, settings: UniverseSettings, now: numb
     lastBackupDay: 1,
     phase: 'regular',
     dayCount: 1,
-    ages: Object.fromEntries(Object.keys(league.players).map((id) => [id, initialAge(id)])),
+    ages,
+    experience: Object.fromEntries(Object.keys(league.players).map((id) => [id, initialExperience(id, ages[id])])),
+    collection: [],
     playoffs: null,
     patron: null,
     archive: [],
@@ -536,6 +563,15 @@ export function reduce(state: UniverseState, event: WorldEvent): UniverseState {
     case 'backupNoted':
       return { ...state, lastBackupDay: Math.max(state.lastBackupDay, event.day) };
 
+    case 'collectionToggled': {
+      if (!state.league.players[event.playerId]) return state;
+      const has = state.collection.some((c) => c.playerId === event.playerId);
+      const collection = has
+        ? state.collection.filter((c) => c.playerId !== event.playerId)
+        : [...state.collection, { playerId: event.playerId, season: state.season, day: state.currentDay }];
+      return { ...state, collection };
+    }
+
     case 'favoriteTeamSet': {
       if (favoriteTeamError(state, event.teamId)) return state;
       return { ...state, persona: { ...state.persona!, favoriteTeamId: event.teamId } };
@@ -581,8 +617,12 @@ export function reduce(state: UniverseState, event: WorldEvent): UniverseState {
       }
       const kind: TimelineKind = h.eventId === 'death' ? 'death' : 'weird';
       const ages = { ...state.ages };
-      for (const c of h.changes) if (c.kind === 'death') ages[c.replacement.id] = rookieAge(c.replacement.id);
-      let next: UniverseState = { ...state, league, weird, ages, playerLog, news: withNews(state, [h.text]), timeline: withTimeline(state, kind, h.text) };
+      const experience = { ...state.experience };
+      for (const c of h.changes) if (c.kind === 'death') {
+        ages[c.replacement.id] = rookieAge(c.replacement.id);
+        experience[c.replacement.id] = 0;
+      }
+      let next: UniverseState = { ...state, league, weird, ages, experience, playerLog, news: withNews(state, [h.text]), timeline: withTimeline(state, kind, h.text) };
       for (const c of h.changes) {
         if (c.kind !== 'death') continue;
         const t = state.league.teams.find((x) => x.id === c.teamId)!;
@@ -818,7 +858,7 @@ function continuePlayoffs(s: UniverseState, dayEnded: number): UniverseState {
 /** The offseason ends: everyone ages, veterans retire, rookies arrive and Season N+1 begins. */
 function newSeason(s: UniverseState): UniverseState {
   const season = s.season + 1;
-  const off = runOffseason(s.league, s.ages, s.settings.seed, season);
+  const off = runOffseason(s.league, s.ages, s.settings.seed, season, s.experience, agingTraits(s.weird, RULES, s.season, s.currentDay));
   const playerLog = { ...s.playerLog };
   for (const n of off.notes) playerLog[n.playerId] = [...(playerLog[n.playerId] ?? []), { season, day: 1, text: n.text }];
   const playerStatus = { ...s.weird.playerStatus };
@@ -842,6 +882,7 @@ function newSeason(s: UniverseState): UniverseState {
     dayCount: s.dayCount + 1,
     league: off.league,
     ages: off.ages,
+    experience: off.experience,
     schedule: generateSchedule(order, s.settings.seasonLength),
     results: {},
     started: [],

@@ -127,12 +127,42 @@ export function seasonAwards(seasonStats: Record<string, StatLine>, league: Leag
 export const initialAge = (playerId: string) => 21 + createRng(playerId, 'age').int(14);
 export const rookieAge = (playerId: string) => 21 + createRng(playerId, 'age').int(3);
 
-/** Rating change for a year of aging: the young improve, the old fade. */
+/** Seasons already played when the league begins: most players debuted at 21–23. */
+export const initialExperience = (playerId: string, age: number) => Math.max(0, age - 21 - createRng(playerId, 'debut').int(3));
+
+/** Where a player is in their career arc. Traits can shift the arc (see AgingTrait). */
+export type CareerPhase = 'rising' | 'prime' | 'fading' | 'twilight';
+export const PHASE_LABEL: Record<CareerPhase, string> = { rising: 'Rising', prime: 'Prime', fading: 'Fading', twilight: 'Twilight' };
+
+export function careerPhase(age: number): CareerPhase {
+  if (age <= 26) return 'rising';
+  if (age <= 30) return 'prime';
+  if (age <= 33) return 'fading';
+  return 'twilight';
+}
+
+/** How far a player is from their peak at a given age, used to shape a brand-new league. */
+export function ageRatingOffset(age: number): number {
+  if (age <= 23) return -6;
+  if (age <= 26) return -2;
+  if (age <= 30) return 3;
+  if (age <= 33) return 0;
+  return -4;
+}
+
+/** Permanent traits that bend the aging curve. `shift` is added every offseason; `delay` postpones retirement. */
+export interface AgingTrait {
+  shift: number;
+  delay: number;
+}
+
+/** Rating change for a year of aging: the young improve, peak in their prime, then fade. */
 function development(age: number, rng: ReturnType<typeof createRng>): number {
-  if (age <= 25) return rng.range(0, 4);
-  if (age <= 29) return rng.range(-1, 2);
-  if (age <= 32) return rng.range(-3, 1);
-  return rng.range(-5, 0);
+  const phase = careerPhase(age);
+  if (phase === 'rising') return rng.range(2, 5);
+  if (phase === 'prime') return rng.range(-1, 2);
+  if (phase === 'fading') return rng.range(-4, 0);
+  return rng.range(-7, -2);
 }
 
 /** Per-mille chance of retiring at a given (new) age. */
@@ -146,6 +176,7 @@ export function retirementChance(age: number): number {
 export interface OffseasonResult {
   league: League;
   ages: Record<string, number>;
+  experience: Record<string, number>;
   retired: { playerId: string; teamId: string; age: number; rookieId: string }[];
   notes: { playerId: string; text: string }[];
 }
@@ -154,10 +185,18 @@ const RATING_KEYS: RatingKey[] = ['contact', 'power', 'discipline', 'velocity', 
 const clamp = (v: number) => (v < 0 ? 0 : v > 100 ? 100 : v);
 
 /** Everyone ages a year. Active players develop; some veterans retire and rookies take their place. */
-export function runOffseason(league: League, ages: Record<string, number>, seed: string, newSeason: number): OffseasonResult {
+export function runOffseason(
+  league: League,
+  ages: Record<string, number>,
+  seed: string,
+  newSeason: number,
+  experience: Record<string, number> = {},
+  traits: Record<string, AgingTrait> = {},
+): OffseasonResult {
   const rng = createRng(seed, newSeason, 'offseason');
   const nextAges: Record<string, number> = {};
   for (const [id, age] of Object.entries(ages)) nextAges[id] = age + 1;
+  const nextExperience: Record<string, number> = { ...experience };
   const players: Record<string, Player> = { ...league.players };
   const used = new Set(Object.values(players).map((p) => p.name));
   const retired: OffseasonResult['retired'] = [];
@@ -167,12 +206,14 @@ export function runOffseason(league: League, ages: Record<string, number>, seed:
     const swap = (ids: string[], offset: number) =>
       ids.map((id, slot) => {
         const age = nextAges[id] ?? initialAge(id);
-        if (rng.chance(retirementChance(age))) {
+        const trait = traits[id] ?? { shift: 0, delay: 0 };
+        if (rng.chance(retirementChance(age - trait.delay))) {
           const rookieId = `${team.id}y${newSeason}r${offset + slot}`;
           const p = players[id];
           const rookie = makeRookie(createRng(seed, newSeason, 'rookie', id), rookieId, team.id, p.role, p.position, used);
           players[rookieId] = rookie;
           nextAges[rookieId] = rookieAge(rookieId);
+          nextExperience[rookieId] = 0;
           retired.push({ playerId: id, teamId: team.id, age, rookieId });
           notes.push({ playerId: id, text: `Retired at ${age}.` });
           notes.push({ playerId: rookieId, text: `Debuted as a rookie, replacing ${p.name}.` });
@@ -180,7 +221,8 @@ export function runOffseason(league: League, ages: Record<string, number>, seed:
         }
         const p = players[id];
         const ratings = { ...p.ratings };
-        const d = development(age, rng);
+        const d = development(age - trait.delay, rng) + trait.shift;
+        nextExperience[id] = (experience[id] ?? initialExperience(id, age - 1)) + 1;
         for (const k of RATING_KEYS) ratings[k] = clamp(ratings[k] + d + rng.range(-1, 1));
         players[id] = { ...p, ratings };
         return id;
@@ -188,5 +230,5 @@ export function runOffseason(league: League, ages: Record<string, number>, seed:
     return { ...team, lineup: swap(team.lineup, 0), rotation: swap(team.rotation, team.lineup.length) };
   });
 
-  return { league: { ...league, teams, players }, ages: nextAges, retired, notes };
+  return { league: { ...league, teams, players }, ages: nextAges, experience: nextExperience, retired, notes };
 }

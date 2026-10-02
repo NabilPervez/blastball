@@ -1,5 +1,5 @@
 import { createFactions } from '../world/factions';
-import { initialAge } from '../world/seasons';
+import { initialAge, initialExperience } from '../world/seasons';
 import { createStadiums } from '../world/weird';
 import { SAVE_VERSION, type UniverseState } from '../world/universe';
 
@@ -75,6 +75,20 @@ export const migrations: Record<number, Migration> = {
   6: (save) => ({ ...save, factionOpinion: {} }),
   // v7 → v8: player picks, favorite-team bonus, bailouts.
   7: (save) => ({ ...save, picks: { back: [], fade: [] }, pickEarnings: 0, lastBailoutDay: 0 }),
+  // v8 → v9: seasons played, and the fan's keepsake collection. Experience is backfilled from age;
+  // later seasons count as played; rookies who debuted in this universe count from their debut.
+  8: (save) => {
+    const ages = save.ages as Record<string, number>;
+    const season = save.season as number;
+    const log = (save.playerLog ?? {}) as Record<string, { season: number; text: string }[]>;
+    const experience = Object.fromEntries(
+      Object.entries(ages).map(([id, age]) => {
+        const debut = (log[id] ?? []).find((e) => /^(Debuted|Called up)/.test(e.text));
+        return [id, debut ? season - debut.season : initialExperience(id, age - (season - 1)) + (season - 1)];
+      }),
+    );
+    return { ...save, experience, collection: [] };
+  },
 };
 
 export function migrateSave(raw: unknown): UniverseState {

@@ -19,6 +19,15 @@
     { "id": "magnetized", "name": "Magnetized", "icon": "◆", "description": "+10 defense, −5 speed.", "delta": { "defense": 10, "speed": -5 } },
     { "id": "featherweight", "name": "Featherweight", "icon": "△", "description": "+12 speed, −8 power.", "delta": { "speed": 12, "power": -8 } },
     { "id": "insomniac", "name": "Insomniac", "icon": "☾", "description": "+6 velocity, −6 control.", "delta": { "velocity": 6, "control": -6 } },
+    { "id": "glasses", "name": "Glasses", "icon": "👓", "description": "Finally sees the plate. +12 control, +6 contact.", "delta": { "control": 12, "contact": 6 } },
+    { "id": "extra-arm", "name": "Extra Arm", "icon": "🦾", "description": "Grew a third arm overnight. +10 velocity and stuff, −4 defense.", "delta": { "velocity": 10, "stuff": 10, "defense": -4 } },
+    { "id": "tornado-touched", "name": "Tornado-Touched", "icon": "🌪", "description": "Got picked up by a twister and put back down. +8 power and velocity, −6 control.", "delta": { "power": 8, "velocity": 8, "control": -6 } },
+    { "id": "three-raccoons", "name": "Secretly Three Raccoons", "icon": "🦝", "description": "Nobody has asked. +10 speed and defense, −6 discipline.", "delta": { "speed": 10, "defense": 10, "discipline": -6 } },
+    { "id": "moonlit", "name": "Moonlit", "icon": "🌙", "description": "Glows faintly at night. +6 stuff and discipline.", "delta": { "stuff": 6, "discipline": 6 } },
+    { "id": "ageless", "name": "Ageless", "icon": "⌛", "description": "Time forgot about them. Peaks 4 years later and fades slower.", "delta": {}, "aging": { "shift": 1, "delay": 4 } },
+    { "id": "late-bloomer", "name": "Late Bloomer", "icon": "🌱", "description": "Gets a little better every offseason, whatever their age.", "delta": { "contact": -3, "control": -3 }, "aging": { "shift": 3 } },
+    { "id": "burning-bright", "name": "Burning Bright", "icon": "🔥", "description": "+10 power and velocity now. Ages twice as hard.", "delta": { "power": 10, "velocity": 10 }, "aging": { "shift": -3, "delay": -2 } },
+    { "id": "old-soul", "name": "Old Soul", "icon": "🕯", "description": "Plays like a veteran. +8 discipline and control, retires 2 years later.", "delta": { "discipline": 8, "control": 8 }, "aging": { "delay": 2 } },
     { "id": "echo", "name": "Echo", "icon": "◎", "description": "Came back from the Departed. +5 to everything.", "delta": { "contact": 5, "power": 5, "discipline": 5, "velocity": 5, "control": 5, "stuff": 5, "speed": 5, "defense": 5 }, "returnedOnly": true },
     { "id": "hollow", "name": "Hollow", "icon": "○", "description": "Came back from the Departed. +10 power and stuff, −8 discipline.", "delta": { "power": 10, "stuff": 10, "discipline": -8 }, "returnedOnly": true },
     { "id": "still-warm", "name": "Still Warm", "icon": "●", "description": "Came back from the Departed. +6 contact and velocity.", "delta": { "contact": 6, "velocity": 6 }, "returnedOnly": true }
@@ -27,15 +36,34 @@
     { "id": "low-ceiling", "name": "Low Ceiling", "icon": "▣", "description": "Everyone hits with −8 power here.", "appliesTo": "all", "delta": { "power": -8 } },
     { "id": "sloped-outfield", "name": "Sloped Outfield", "icon": "◢", "description": "+8 speed, −6 defense for everyone.", "appliesTo": "all", "delta": { "speed": 8, "defense": -6 } },
     { "id": "haunted-dugout", "name": "Haunted Visitors' Dugout", "icon": "☾", "description": "Visiting players get −8 control and −6 discipline.", "appliesTo": "away", "delta": { "control": -8, "discipline": -6 } },
-    { "id": "roaring-crowd", "name": "Roaring Crowd", "icon": "♪", "description": "Home batters get +6 contact.", "appliesTo": "home", "delta": { "contact": 6 } }
+    { "id": "roaring-crowd", "name": "Roaring Crowd", "icon": "♪", "description": "Home batters get +6 contact.", "appliesTo": "home", "delta": { "contact": 6 } },
+    { "id": "tornado-alley", "name": "Tornado Alley", "icon": "🌪", "description": "Tornadoes fill the stadium: +10 power and velocity, −8 control for everyone.", "appliesTo": "all", "delta": { "power": 10, "velocity": 10, "control": -8 } },
+    { "id": "blood-moon", "name": "Blood Moon", "icon": "🌑", "description": "A red moon hangs over the park: +8 contact and stuff for everyone.", "appliesTo": "all", "delta": { "contact": 8, "stuff": 8 } },
+    { "id": "lava-moat", "name": "Lava Moat", "icon": "🌋", "description": "Nobody wants to chase a ball near it. Home fielders get +8 defense.", "appliesTo": "home", "delta": { "defense": 8 } }
   ],
   "events": [
+    {
+      "id": "gear-drop",
+      "weight": 3,
+      "minChaos": "calm",
+      "target": "player",
+      "effect": { "type": "addPlayerMod", "mods": ["glasses", "extra-arm"], "durationDays": [8, 30] },
+      "text": "{player} of the {team} showed up to practice with {mod}."
+    },
+    {
+      "id": "storm-front",
+      "weight": 2,
+      "minChaos": "weird",
+      "target": "team",
+      "effect": { "type": "addStadiumMod", "mods": ["tornado-alley", "blood-moon"], "durationDays": [2, 6] },
+      "text": "The sky over {stadium} turned strange: {mod}."
+    },
     {
       "id": "player-mod",
       "weight": 6,
       "minChaos": "calm",
       "target": "player",
-      "effect": { "type": "addPlayerMod", "mods": ["running-hot", "foggy", "blessed", "cursed", "magnetized", "featherweight", "insomniac"], "durationDays": [3, 10] },
+      "effect": { "type": "addPlayerMod", "mods": ["running-hot", "foggy", "blessed", "cursed", "magnetized", "featherweight", "insomniac", "tornado-touched", "moonlit"], "durationDays": [3, 10] },
       "text": "{player} of the {team} is now {mod}."
     },
     {
@@ -43,7 +71,7 @@
       "weight": 2,
       "minChaos": "normal",
       "target": "player",
-      "effect": { "type": "addPlayerMod", "mods": ["blessed", "cursed", "magnetized", "featherweight"], "durationDays": null },
+      "effect": { "type": "addPlayerMod", "mods": ["blessed", "cursed", "magnetized", "featherweight", "three-raccoons", "ageless", "late-bloomer", "burning-bright", "old-soul"], "durationDays": null },
       "text": "{player} of the {team} has been permanently marked: {mod}."
     },
     {
@@ -51,7 +79,7 @@
       "weight": 2,
       "minChaos": "normal",
       "target": "team",
-      "effect": { "type": "addStadiumMod", "mods": ["low-ceiling", "sloped-outfield", "haunted-dugout", "roaring-crowd"], "durationDays": null },
+      "effect": { "type": "addStadiumMod", "mods": ["low-ceiling", "sloped-outfield", "haunted-dugout", "roaring-crowd", "lava-moat"], "durationDays": null },
       "text": "Overnight, {stadium} changed: {mod}."
     },
     {

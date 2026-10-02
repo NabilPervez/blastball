@@ -156,9 +156,13 @@ describe('save fixtures', () => {
     const { migrateSave } = await import('../src/storage/migrate');
     const raw = (await import('./fixtures/save-v6.json')).default;
     const u = migrateSave(structuredClone(raw));
-    const strip = (x: object) => ({ ...x, saveVersion: undefined, factionOpinion: undefined, picks: undefined, pickEarnings: undefined, lastBailoutDay: undefined });
+    const strip = (x: object) => ({ ...x, saveVersion: undefined, factionOpinion: undefined, picks: undefined, pickEarnings: undefined, lastBailoutDay: undefined, experience: undefined, collection: undefined });
     expect(strip(u)).toEqual(strip(raw));
     expect(u.factionOpinion).toEqual({});
+    expect(u.collection).toEqual([]);
+    // Founding players have finished at least Season 1; this offseason's rookies have played none.
+    expect(u.experience.t1p1).toBeGreaterThanOrEqual(1);
+    expect(u.experience.t3y2r10).toBe(0);
     expect(u.season).toBe(2);
     expect(u.archive).toHaveLength(1);
     expect(runCommand(u, { type: 'endDay' }).state.currentDay).toBe(u.currentDay + 1);

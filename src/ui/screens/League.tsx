@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { avg, emptyLine, era, inningsPitched, type StatLine } from '../../engine/boxScore';
-import type { Player } from '../../engine/types';
+import type { Player, RatingKey } from '../../engine/types';
 import { analystReveal } from '../../world/persona';
-import { rarityOf } from '../../world/rarity';
+import { flavorOf } from '../../world/rarity';
 import { standingsOf, type UniverseState } from '../../world/universe';
 import { TeamBadge } from '../components/bits';
-import { PlayerCard } from '../components/PlayerCard';
+import { cardPropsFor, PlayerCard } from '../components/PlayerCard';
 import { ModList, playerModsOf, stadiumModsOf } from '../components/Mods';
 import { PatronPanel } from '../components/SeasonBits';
 import { Leaders, PickButtons } from '../components/FanFeatures';
@@ -89,9 +89,8 @@ function HallOfTheDeparted({ u }: { u: UniverseState }) {
           {gone.map((d) => (
             <PlayerCard
               key={d.playerId}
-              player={u.league.players[d.playerId]}
+              {...cardPropsFor(u, d.playerId)}
               team={teamOf(u, d.teamId)}
-              rarity="departed"
               onOpen={() => showDetail({ kind: 'player', id: d.playerId })}
               extra={<span className="muted small">Season {d.season}, day {d.day}</span>}
             />
@@ -197,7 +196,7 @@ function TeamPage({ u, teamId }: { u: UniverseState; teamId: string }) {
   const grid = (ids: string[]) => (
     <div className="card-grid">
       {ids.map((id) => (
-        <PlayerCard key={id} player={u.league.players[id]} team={team} rarity={rarityOf(u, id)} extra={analystExtra(u, u.league.players[id])} mods={playerModsOf(u, id)} onOpen={() => showDetail({ kind: 'player', id })} />
+        <PlayerCard key={id} {...cardPropsFor(u, id)} extra={analystExtra(u, u.league.players[id])} onOpen={() => showDetail({ kind: 'player', id })} />
       ))}
     </div>
   );
@@ -289,14 +288,22 @@ export function StatTable({ player, season, career }: { player: Player; season: 
   );
 }
 
+/** Founding players arrive with history: how many seasons they'd played before the league began. */
+function startLine(u: UniverseState, playerId: string) {
+  const before = (u.experience[playerId] ?? 0) - (u.season - 1);
+  return before > 0 ? `A ${before}-season veteran when the league began, playing for` : 'Debuted with';
+}
+
 function Timeline({ u, playerId }: { u: UniverseState; playerId: string }) {
   const log = u.playerLog[playerId] ?? [];
   const team = teamOf(u, u.league.players[playerId].teamId);
   return (
     <ol className="timeline">
-      <li>
-        <span className="muted small">Season 1 · Day 1</span> Joined the {team.city} {team.name}.
-      </li>
+      {!log.some((e) => /^(Debuted|Called up)/.test(e.text)) && (
+        <li>
+          <span className="muted small">Season 1 · Day 1</span> {startLine(u, playerId)} the {team.city} {team.name}.
+        </li>
+      )}
       {log.map((e, i) => (
         <li key={i}>
           <span className="muted small">
@@ -306,6 +313,62 @@ function Timeline({ u, playerId }: { u: UniverseState; playerId: string }) {
         </li>
       ))}
     </ol>
+  );
+}
+
+function CollectButton({ u, playerId }: { u: UniverseState; playerId: string }) {
+  const dispatch = useGame((s) => s.dispatch);
+  const collected = u.collection.some((c) => c.playerId === playerId);
+  return (
+    <button className={`btn ${collected ? '' : 'primary'} inline collect-btn`} aria-pressed={collected} onClick={() => dispatch({ type: 'collectionToggled', playerId })}>
+      {collected ? '♥ In your collection' : '♡ Add to collection'}
+    </button>
+  );
+}
+
+const RATING_ROWS: [RatingKey, string][] = [
+  ['contact', 'Contact'],
+  ['power', 'Power'],
+  ['discipline', 'Discipline'],
+  ['velocity', 'Velocity'],
+  ['control', 'Control'],
+  ['stuff', 'Stuff'],
+  ['speed', 'Speed'],
+  ['defense', 'Defense'],
+];
+
+/** Base ratings next to what the player's traits turn them into. */
+function RatingsTable({ u, player }: { u: UniverseState; player: Player }) {
+  const mods = playerModsOf(u, player.id);
+  const delta = (k: RatingKey) => mods.reduce((sum, m) => sum + (m.def.delta[k] ?? 0), 0);
+  return (
+    <div className="card table-wrap">
+      <table className="stat-table ratings-table">
+        <thead>
+          <tr>
+            <th scope="col">Rating</th>
+            <th scope="col">Base</th>
+            <th scope="col">With traits</th>
+          </tr>
+        </thead>
+        <tbody>
+          {RATING_ROWS.map(([k, label]) => {
+            const d = delta(k);
+            const now = Math.max(0, Math.min(100, player.ratings[k] + d));
+            return (
+              <tr key={k}>
+                <th scope="row">{label}</th>
+                <td>{player.ratings[k]}</td>
+                <td className={d > 0 ? 'up' : d < 0 ? 'down' : ''}>
+                  {now}
+                  {d !== 0 && <span className="small"> {d > 0 ? `▲${d}` : `▼${-d}`}</span>}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -323,12 +386,9 @@ function PlayerPage({ u, playerId }: { u: UniverseState; playerId: string }) {
       </button>
       <div className="player-page">
         <PlayerCard
-          player={player}
-          team={team}
-          rarity={rarityOf(u, playerId)}
+          {...cardPropsFor(u, playerId)}
           size="lg"
           extra={analystExtra(u, player)}
-          mods={playerModsOf(u, playerId)}
           back={
             <div className="pc-back-body">
               <strong className="display">{player.name}</strong>
@@ -348,9 +408,13 @@ function PlayerPage({ u, playerId }: { u: UniverseState; playerId: string }) {
               Departed on season {departure.season}, day {departure.day}: {player.name} {departure.cause}
             </p>
           )}
+          <p className="flavor">“{flavorOf(playerId)}”</p>
+          <CollectButton u={u} playerId={playerId} />
           {u.persona && !['departed', 'retired'].includes(u.weird.playerStatus[playerId] ?? '') && <PickButtons player={player} />}
-          <h2>Modifiers</h2>
+          <h2>Traits</h2>
           <ModList mods={playerModsOf(u, playerId)} currentDay={u.currentDay} />
+          <h2>Ratings</h2>
+          <RatingsTable u={u} player={player} />
           <h2>Stats</h2>
           <div className="card table-wrap">
             <StatTable player={player} season={season} career={career} />

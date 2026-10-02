@@ -200,7 +200,7 @@ export function Guide() {
         <p>Most nights something strange might happen. Your league's <strong>chaos</strong> level (Calm, Normal, Weird, Unhinged) sets how often.</p>
         <ul className="guide-list">
           <li>
-            <strong>Player modifiers</strong> (shown as icons on cards):{' '}
+            <strong>Player traits</strong> (named on every card; some, like Ageless or Burning Bright, change how a player ages):{' '}
             {RULES.playerMods
               .filter((m) => !m.returnedOnly)
               .map((m) => `${m.icon} ${m.name}`)
@@ -228,7 +228,7 @@ export function Guide() {
         <p>
           After the regular season the top four teams (top two in a 4-team league) play for the <strong>Blastball Cup</strong>: semifinals are best of {SEMIS_BEST_OF}, the final best of {FINAL_BEST_OF}. Playoff games don't count in the standings. The season's MVP and Ace (best pitcher) are named at the end.
         </p>
-        <p>Then comes a one-day offseason. Everyone ages a year: young players improve, players past thirty fade, and veterans may retire, replaced by rookies. A new schedule is drawn and Season N+1 begins.</p>
+        <p>Then comes a one-day offseason. Everyone ages a year. Careers have an arc: players are <em>Rising</em> until 26, in their <em>Prime</em> from 27 to 30, then <em>Fading</em> and finally in their <em>Twilight</em> before they retire, replaced by rookies. A new league starts mid-history, so most players already have a few seasons behind them. A new schedule is drawn and Season N+1 begins.</p>
       </Section>
 
       <Section id="patron" title="Patron">
@@ -238,10 +238,17 @@ export function Guide() {
       </Section>
 
       <Section id="cards" title="Player cards">
-        <p>Every player is a collectible card with procedurally drawn art, star ratings and a frame showing their story, not their stats:</p>
+        <p>Every player is a collectible card with procedurally drawn art, star ratings, their age and career phase, their traits, and a border showing how strange their story is:</p>
         <ul className="guide-list">
           <li>
-            <strong>Rookie</strong> → <strong>Veteran</strong> (60+ games or a few big moments) → <strong>Legend</strong> (a career full of moments).
+            Border tiers: <strong>Common</strong> → <strong>Uncommon</strong> → <strong>Rare</strong> → <strong>Epic</strong> → <strong>Legendary</strong>. Traits count most (permanent ones double), then big moments, a trip to the Departed and a long career.
+          </li>
+          <li>
+            <strong>Rookie</strong> (first season) → <strong>Veteran</strong> → <strong>Legend</strong> (a career full of moments).
+          </li>
+          <li>Some traits change how the card looks: Blessed shimmers, Cursed cracks, Foggy blurs.</li>
+          <li>
+            Tap <strong>♡ Add to collection</strong> on any player to keep their card in the History tab — as many favorites as you like. It's just for keeps, and the card stays even if they retire or depart.
           </li>
           <li>
             <strong>Departed</strong> cards are desaturated; <strong>Returned</strong> cards glow.

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { listPinned } from '../../storage/db';
 import type { TimelineKind, UniverseState } from '../../world/universe';
-import { PlayerCard } from '../components/PlayerCard';
+import { cardPropsFor, PlayerCard } from '../components/PlayerCard';
 import { useGame } from '../store';
 
 const FILTERS: { id: TimelineKind | 'all'; label: string }[] = [
@@ -84,6 +84,45 @@ function PinnedGames({ u }: { u: UniverseState }) {
   );
 }
 
+const TIER_ORDER = ['legendary', 'epic', 'rare', 'uncommon', 'common'];
+
+/** The fan's keepsakes: favorite players' cards, living or not. Purely for fun. */
+function Collection({ u }: { u: UniverseState }) {
+  const showDetail = useGame((s) => s.showDetail);
+  const [sort, setSort] = useState<'added' | 'tier'>('added');
+  const cards = u.collection.map((c) => ({ c, props: cardPropsFor(u, c.playerId) }));
+  if (sort === 'tier') cards.sort((a, b) => TIER_ORDER.indexOf(a.props.tier) - TIER_ORDER.indexOf(b.props.tier));
+  return (
+    <>
+      <h2>Your collection</h2>
+      {cards.length === 0 ? (
+        <p className="muted">No keepsakes yet. Open any player and tap ♡ Add to collection to keep their card here, whatever happens to them.</p>
+      ) : (
+        <>
+          <div className="chip-row" role="group" aria-label="Sort collection">
+            <button className="chip" aria-pressed={sort === 'added'} onClick={() => setSort('added')}>
+              Newest last
+            </button>
+            <button className="chip" aria-pressed={sort === 'tier'} onClick={() => setSort('tier')}>
+              Rarest first
+            </button>
+          </div>
+          <div className="card-grid">
+            {cards.map(({ c, props }) => (
+              <PlayerCard
+                key={c.playerId}
+                {...props}
+                onOpen={() => showDetail({ kind: 'player', id: c.playerId })}
+                extra={<span className="muted small">Collected season {c.season}, day {c.day}</span>}
+              />
+            ))}
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+
 export function History() {
   const u = useGame((s) => s.u)!;
   const showDetail = useGame((s) => s.showDetail);
@@ -94,6 +133,8 @@ export function History() {
       <header className="screen-head">
         <h1>History</h1>
       </header>
+
+      <Collection u={u} />
 
       {champions.length > 0 && (
         <>
@@ -170,9 +211,8 @@ export function History() {
           {departed.map((d) => (
             <PlayerCard
               key={d.playerId}
-              player={u.league.players[d.playerId]}
+              {...cardPropsFor(u, d.playerId)}
               team={u.league.teams.find((t) => t.id === d.teamId)!}
-              rarity="departed"
               onOpen={() => showDetail({ kind: 'player', id: d.playerId })}
               extra={<span className="muted small">Season {d.season}, day {d.day}</span>}
             />

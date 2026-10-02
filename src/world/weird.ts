@@ -24,6 +24,8 @@ export interface ModDef {
   delta: Delta;
   /** Only granted to players who return from the Departed. */
   returnedOnly?: boolean;
+  /** Bends the career arc: `shift` is added to each offseason's development, `delay` postpones decline and retirement (years). */
+  aging?: { shift?: number; delay?: number };
 }
 
 export interface StadiumModDef extends ModDef {
@@ -84,6 +86,7 @@ export function validatePack(raw: unknown): RulePack {
   for (const m of p.playerMods ?? []) {
     if (!m.id || !m.name || !m.icon) fail('player mod needs id, name, icon');
     checkDelta(m.delta, `mod ${m.id}`);
+    if (m.aging && !['shift', 'delay'].every((k) => (m.aging as Record<string, unknown>)[k] === undefined || typeof (m.aging as Record<string, unknown>)[k] === 'number')) fail(`mod ${m.id}: aging values must be numbers`);
     modIds.add(m.id);
   }
   const stadiumIds = new Set<string>();
@@ -173,6 +176,21 @@ export function findPlayerMod(pack: RulePack, id: string) {
 }
 export function findStadiumMod(pack: RulePack, id: string) {
   return pack.stadiumMods.find((m) => m.id === id);
+}
+
+/** Each player's combined aging trait from their active modifiers (only players with one are listed). */
+export function agingTraits(w: WeirdState, pack: RulePack, season: number, day: number): Record<string, { shift: number; delay: number }> {
+  const out: Record<string, { shift: number; delay: number }> = {};
+  for (const [id, mods] of Object.entries(w.playerMods)) {
+    for (const m of mods) {
+      const aging = isActiveMod(m, season, day) ? findPlayerMod(pack, m.id)?.aging : undefined;
+      if (!aging) continue;
+      const t = (out[id] ??= { shift: 0, delay: 0 });
+      t.shift += aging.shift ?? 0;
+      t.delay += aging.delay ?? 0;
+    }
+  }
+  return out;
 }
 
 const clamp = (v: number) => (v < 0 ? 0 : v > 100 ? 100 : v);

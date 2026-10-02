@@ -21,20 +21,6 @@ export function stadiumModsOf(u: UniverseState, teamId: string): ShownMod[] {
     .filter((m) => !!m.def);
 }
 
-/** Modifier icons for a card. Each has a text label too, so color/icon is never the only signal. */
-export function ModIcons({ mods }: { mods: ShownMod[] }) {
-  if (!mods.length) return null;
-  return (
-    <span className="mod-icons">
-      {mods.map((m) => (
-        <span key={m.def.id} className="mod-icon" title={`${m.def.name}: ${m.def.description}`} aria-label={`Modifier: ${m.def.name}`}>
-          {m.def.icon}
-        </span>
-      ))}
-    </span>
-  );
-}
-
 export function ModList({ mods, currentDay }: { mods: ShownMod[]; currentDay: number }) {
   if (!mods.length) return <p className="muted small">None.</p>;
   return (
