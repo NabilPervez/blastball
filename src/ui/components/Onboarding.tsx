@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { getSetting, setSetting } from '../../storage/db';
+import { MAX_BACKED, MAX_FADED } from '../../world/picks';
+import { BAILOUT_COINS, DAILY_STIPEND, FAVORITE_LOCKS_AFTER_SEASON, FAVORITE_WIN_BONUS, STARTING_COINS } from '../../world/universe';
 import { useGame, type Tab } from '../store';
 
 const SLIDES: { eyebrow: string; title: string; body: string[] }[] = [
@@ -8,14 +10,14 @@ const SLIDES: { eyebrow: string; title: string; body: string[] }[] = [
     title: 'A league that plays itself',
     body: [
       'Blastball is a strange sports league that runs on its own. You never swing a bat or throw a pitch.',
-      "You're a fan living inside it: you watch, bet, vote, and slowly bend the rules of reality.",
+      "You're a fan living inside it: you watch, bet, back your favorites, vote, and slowly bend the rules of reality.",
     ],
   },
   {
     eyebrow: '1 · Watch',
-    title: 'Every game, pitch by pitch',
+    title: 'Every game, live',
     body: [
-      'Games play out as a live text feed. Watch at Live, 2× or 5× speed — or skip straight to the final.',
+      'Today’s games play live in the “Now playing” bar at the top of every screen — score, inning, bases and the latest play. Tap it to watch pitch by pitch, or pause it.',
       'In Living time the league keeps playing even when the app is closed. Come back to a “While You Were Gone” summary.',
     ],
   },
@@ -23,24 +25,32 @@ const SLIDES: { eyebrow: string; title: string; body: string[] }[] = [
     eyebrow: '2 · Bet',
     title: 'Coins come from good calls',
     body: [
-      'Bet coins on today’s games. Odds come from what any fan can see: star ratings and the standings.',
-      'Your fan persona gives you a perk — bonus payouts, hidden stats, early warnings of strange things.',
+      `You start with ${STARTING_COINS} coins and get ${DAILY_STIPEND} more every day. Bet on today’s games — odds come from what any fan can see.`,
+      `Pick a favorite team during Season 1 and earn +${FAVORITE_WIN_BONUS} every time they win. Your fan persona adds a perk. Go broke? The league office tops you back up with ${BAILOUT_COINS}.`,
     ],
   },
   {
-    eyebrow: '3 · Vote',
+    eyebrow: '3 · Back & fade',
+    title: 'Back your heroes, fade the slumpers',
+    body: [
+      `Back up to ${MAX_BACKED} players: hitters pay you for hits and home runs, pitchers for strikeouts.`,
+      `Fade up to ${MAX_FADED} players: you earn when they strike out, go hitless, or give up hits and runs. The League tab’s leaderboards show who’s hot.`,
+    ],
+  },
+  {
+    eyebrow: '4 · Vote',
     title: 'Coins become power',
     body: [
-      'Every week there’s an election. Six fan factions vote, and so can you — spend coins on votes.',
-      'Each extra vote costs more than the last, so you can swing a close race but never buy everything. What wins really changes the league.',
+      'Every week there’s an election. Six fan factions vote, and so can you — spend coins on votes. Each extra vote costs more than the last.',
+      'What wins really changes the league. Factions react in the news, warm to you or turn on you, and once you matter they’ll know your name.',
     ],
   },
   {
-    eyebrow: '4 · Get strange',
+    eyebrow: '5 · Get strange',
     title: 'Things will go wrong. Beautifully.',
     body: [
       'Players get cursed or blessed. Stadiums change overnight. Very rarely, someone departs forever — unless the fans vote them back.',
-      'Seasons end in playoffs, players age and retire, and from Season 2 you can become a team’s Patron.',
+      'Seasons end in playoffs for the Blastball Cup. Players age, retire and are replaced by rookies, and from Season 2 you can become a team’s Patron.',
     ],
   },
   {
@@ -114,6 +124,8 @@ export function ChecklistCard() {
     { done: !!u.persona, label: 'Choose your fan persona', tab: 'today' },
     { done: u.started.length > 0 || u.season > 1, label: 'Watch a game live', tab: 'games' },
     { done: u.bets.length > 0, label: 'Place a bet', tab: 'today' },
+    { done: !!u.persona?.favoriteTeamId || u.season > FAVORITE_LOCKS_AFTER_SEASON, label: 'Pick a favorite team', tab: 'today' },
+    { done: u.picks.back.length + u.picks.fade.length > 0, label: 'Back or fade a player', tab: 'league' },
     { done: u.elections.some((e) => e.playerVotes.some((v) => v > 0)), label: 'Buy a vote in an election', tab: 'vote' },
     { done: guideRead, label: 'Skim the Guide', tab: 'guide' },
   ];
