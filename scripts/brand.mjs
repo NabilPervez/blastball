@@ -123,3 +123,20 @@ export const SPLASH_DEVICES = [
   { name: 'ipad-mini', w: 744, h: 1133, dpr: 2 },
   { name: 'ipad-9-7', w: 768, h: 1024, dpr: 2 },
 ];
+
+/** Google Play feature graphic, 1024×500. Play may overlay a play button in the centre, so the art sits left. */
+export function featureGraphicHtml() {
+  return page(
+    1024,
+    500,
+    `<div class="glow" style="background:radial-gradient(55% 75% at 20% 50%, rgba(255,122,26,.28), transparent 70%)"></div>
+     <div style="position:absolute;inset:0;display:flex;align-items:center;gap:44px;padding:0 70px">
+       <div style="width:250px;height:250px;flex:none">${iconSvg({ rounded: true }).replace('width="512" height="512"', 'width="250" height="250"')}</div>
+       <div>
+         <div class="word" style="font-size:118px">BLAST<span>BALL</span></div>
+         <div style="font-size:31px;margin-top:16px;font-weight:600">The sports league that plays itself.</div>
+         <div style="font-size:24px;margin-top:12px;color:${COLORS.muted}">Watch · Bet · Vote · Bend reality</div>
+       </div>
+     </div>`,
+  );
+}

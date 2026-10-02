@@ -47,3 +47,10 @@
   for = "/splash/*"
   [headers.values]
     Cache-Control = "public, max-age=604800"
+
+# Digital Asset Links: proves the Android app owns this site, so the TWA hides the URL bar.
+[[headers]]
+  for = "/.well-known/assetlinks.json"
+  [headers.values]
+    Content-Type = "application/json"
+    Access-Control-Allow-Origin = "*"

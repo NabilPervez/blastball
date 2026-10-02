@@ -9,7 +9,10 @@ const PORT = 4180;
 const URL = `http://localhost:${PORT}/`;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-mkdirSync('public/screenshots', { recursive: true });
+// PLAY=1 writes Google Play sizes (max 2:1 aspect) to store/play/ instead.
+const PLAY = !!process.env.PLAY;
+const OUT = PLAY ? 'store/play' : 'public/screenshots';
+mkdirSync(OUT, { recursive: true });
 
 // Serve the production build.
 const server = spawn(`npx vite preview --port ${PORT} --strictPort`, { shell: true, stdio: 'ignore' });
@@ -76,7 +79,7 @@ async function setUpLeague(page) {
   await sleep(1200);
   await page.evaluate(helpers);
   // Two weeks in, with a bet and some votes, so the league has a story to show.
-  await page.evaluate(() => window.__click('+7 days'));
+  await page.evaluate(() => window.__click('Next week'));
   await sleep(2500);
   await page.evaluate(() => window.__click('Got it'));
   await page.evaluate(() => {
@@ -94,7 +97,7 @@ async function setUpLeague(page) {
   await sleep(400);
   await page.evaluate(() => window.__tab('Today'));
   await sleep(300);
-  await page.evaluate(() => window.__click('+7 days'));
+  await page.evaluate(() => window.__click('Next week'));
   await sleep(2500);
   await page.evaluate(() => {
     window.__click('Got it');
@@ -113,11 +116,11 @@ async function setUpLeague(page) {
   await page.evaluate(() => window.scrollTo(0, 0));
 }
 
-const shot = (page, name) => page.screenshot({ path: `public/screenshots/${name}.png`, type: 'png' });
+const shot = (page, name) => page.screenshot({ path: `${OUT}/${name}.png`, type: 'png' });
 
-// Phone: 390×844 CSS px at 3× → 1170×2532.
+// Phone: 390×844 CSS px at 3× → 1170×2532 (Play: 360×640 at 3× → 1080×1920).
 {
-  const page = await session({ width: 390, height: 844, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
+  const page = await session({ width: PLAY ? 360 : 390, height: PLAY ? 640 : 844, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
   await setUpLeague(page);
   await shot(page, 'phone-today');
 
@@ -144,8 +147,17 @@ const shot = (page, name) => page.screenshot({ path: `public/screenshots/${name}
   await shot(page, 'phone-player');
 }
 
+// Play tablets: 7-inch 600×960 at 2× → 1200×1920, 10-inch 800×1280 at 2× → 1600×2560.
+if (PLAY) {
+  for (const [name, width, height] of [['tablet7-today', 600, 960], ['tablet10-today', 800, 1280]]) {
+    const page = await session({ width, height, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+    await setUpLeague(page);
+    await shot(page, name);
+  }
+}
+
 // Desktop: 1280×800 CSS px at 1.5× → 1920×1200.
-{
+if (!PLAY) {
   const page = await session({ width: 1280, height: 800, deviceScaleFactor: 1.5 });
   await setUpLeague(page);
   await shot(page, 'desktop-today');
@@ -156,5 +168,5 @@ const shot = (page, name) => page.screenshot({ path: `public/screenshots/${name}
 
 await browser.close();
 server.kill();
-console.log('screenshots written to public/screenshots/');
+console.log(`screenshots written to ${OUT}/`);
 process.exit(0);
