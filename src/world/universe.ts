@@ -9,6 +9,7 @@ import { createFactions, type Faction } from './factions';
 import { reactToChampion, reactToDeath, reactToElection, reactToPatron, reactToReturn, type FactionNews, type FanContext } from './factionNews';
 import { generateLeague } from './generate';
 import { personaMultiplier, winningPayout, type Persona } from './persona';
+import { emptyPicks, MAX_BACKED, MAX_FADED, pickOf, pickPayout, type PickKind, type Picks } from './picks';
 import { advancePlayoffs, initialAge, isPlayoffGame, rookieAge, runOffseason, seasonAwards, startPlayoffs, type Phase, type Playoffs, type SeasonRecord } from './seasons';
 import { createRng } from '../engine/rng';
 import { applyHappening, createStadiums, DEFAULT_PACKS, effectiveLeague, expireMods, mergePacks, resurrect, rollDay, type WeirdHappening, type WeirdState } from './weird';
@@ -21,7 +22,14 @@ export const RULES = mergePacks(DEFAULT_PACKS);
  * `reduce(state, event)`, so the same events always produce the same state.
  */
 
-export const SAVE_VERSION = 7;
+export const SAVE_VERSION = 8;
+
+/** Out of coins with nothing riding? The league office tops you back up (once a day). */
+export const BAILOUT_COINS = 100;
+/** Bonus every time your favorite team wins. */
+export const FAVORITE_WIN_BONUS = 15;
+/** Favorite team can be chosen or changed until this season ends. */
+export const FAVORITE_LOCKS_AFTER_SEASON = 1;
 
 /** Patron tier (PRD §8): unlocked from Season 2. */
 export const PATRON_COST = 150;
@@ -140,6 +148,12 @@ export interface UniverseState {
   statsBySeason: Record<number, Record<string, StatLine>>;
   /** Each faction's opinion of the player, -5..5. */
   factionOpinion: Record<string, number>;
+  /** Players the fan backs or fades. */
+  picks: Picks;
+  /** Coins earned from picks this season. */
+  pickEarnings: number;
+  /** dayCount of the last bailout, so it happens at most once a day. */
+  lastBailoutDay: number;
 }
 
 export interface NewsItem {
@@ -161,7 +175,9 @@ export type WorldEvent =
   | { type: 'timeSettingsChanged'; timeMode: TimeMode; dayLengthMinutes: DayLengthMinutes; nowMs: number }
   | { type: 'clockSet'; clock: Clock }
   | { type: 'backupNoted'; day: number }
-  | { type: 'patronSponsored'; teamId: string };
+  | { type: 'patronSponsored'; teamId: string }
+  | { type: 'favoriteTeamSet'; teamId: string }
+  | { type: 'pickSet'; playerId: string; kind: PickKind | null };
 
 export function createUniverse(id: string, settings: UniverseSettings, now: number, persona: Persona | null = null): UniverseState {
   const league = generateLeague({ seed: settings.seed, name: settings.name, teamCount: settings.leagueSize });
@@ -199,6 +215,9 @@ export function createUniverse(id: string, settings: UniverseSettings, now: numb
     archive: [],
     statsBySeason: {},
     factionOpinion: {},
+    picks: emptyPicks(),
+    pickEarnings: 0,
+    lastBailoutDay: 0,
   };
   return withNewElection(base, 1);
 }
@@ -272,6 +291,59 @@ function withPatron(s: UniverseState, league: League, game: ScheduledGame): Leag
 }
 
 export const gameLeague = (s: UniverseState, game: ScheduledGame) => withPatron(s, effectiveLeague(s.league, s.weird, game, s.season, RULES), game);
+
+/** Why the favorite team can't be set, or null if it can. */
+export function favoriteTeamError(s: UniverseState, teamId: string): string | null {
+  if (!s.persona) return 'Choose your fan persona first.';
+  if (s.season > FAVORITE_LOCKS_AFTER_SEASON) return `Your favorite team was locked in after Season ${FAVORITE_LOCKS_AFTER_SEASON}.`;
+  if (!s.league.teams.some((t) => t.id === teamId)) return 'No such team.';
+  return null;
+}
+
+/** Why a pick can't be made, or null if it can. kind null = clear the pick. */
+export function pickError(s: UniverseState, playerId: string, kind: PickKind | null): string | null {
+  if (!s.league.players[playerId]) return 'No such player.';
+  if (kind === null) return null;
+  const status = s.weird.playerStatus[playerId];
+  if (status === 'departed' || status === 'retired') return "That player isn't playing any more.";
+  const current = pickOf(s.picks, playerId);
+  if (current === kind) return null;
+  if (kind === 'back' && s.picks.back.length >= MAX_BACKED) return `You can back up to ${MAX_BACKED} players. Drop one first.`;
+  if (kind === 'fade' && s.picks.fade.length >= MAX_FADED) return `You can fade up to ${MAX_FADED} players. Drop one first.`;
+  return null;
+}
+
+const openBetsThisSeason = (s: UniverseState) => s.bets.some((b) => b.status === 'open' && b.season === s.season);
+
+/** Broke, with nothing riding on a game: the league office hands back some coins (once a day). */
+function withBailout(s: UniverseState): UniverseState {
+  if (s.coins >= 1 || openBetsThisSeason(s) || s.lastBailoutDay === s.dayCount) return s;
+  const fan = s.persona?.fanName || 'A broke fan';
+  return {
+    ...s,
+    coins: s.coins + BAILOUT_COINS,
+    lastBailoutDay: s.dayCount,
+    ledger: withLedger(s, BAILOUT_COINS, 'League office bailout'),
+    news: withNews(s, [`The league office takes pity on ${fan}: +${BAILOUT_COINS} coins to get back in the game.`]),
+  };
+}
+
+/** After a game: favorite-team bonus, pick payouts, then the bailout check. */
+function afterGame(s: UniverseState, summary: GameSummary, box: BoxScore): UniverseState {
+  let next = s;
+  const winnerId = summary.homeScore > summary.awayScore ? summary.homeId : summary.awayId;
+  const fav = s.persona?.favoriteTeamId;
+  if (fav && fav === winnerId) {
+    next = { ...next, coins: next.coins + FAVORITE_WIN_BONUS, ledger: withLedger(next, FAVORITE_WIN_BONUS, `Your ${teamName(next, fav)} won`, summary.day) };
+  }
+  const lines = pickPayout(next.picks, box, next.league);
+  const total = lines.reduce((sum, l) => sum + l.amount, 0);
+  if (total > 0) {
+    const detail = lines.map((l) => `${next.league.players[l.playerId].name} ${l.why}`).join(', ');
+    next = { ...next, coins: next.coins + total, pickEarnings: next.pickEarnings + total, ledger: withLedger(next, total, `Picks: ${detail}`, summary.day) };
+  }
+  return withBailout(next);
+}
 
 const teamName = (s: UniverseState, id: string) => s.league.teams.find((t) => t.id === id)?.name ?? id;
 
@@ -423,19 +495,20 @@ export function reduce(state: UniverseState, event: WorldEvent): UniverseState {
         seasonStats[pid] = addLines(seasonStats[pid] ?? emptyLine(), line);
         careerStats[pid] = addLines(careerStats[pid] ?? emptyLine(), line);
       }
-      return settleBets({ ...state, results: { ...state.results, [summary.gameId]: summary }, seasonStats, careerStats, playerLog }, summary);
+      return afterGame(settleBets({ ...state, results: { ...state.results, [summary.gameId]: summary }, seasonStats, careerStats, playerLog }, summary), summary, box);
     }
 
     case 'dayEnded':
     {
       if (event.day !== state.currentDay) return state;
-      if (state.phase === 'offseason') return newSeason(state);
+      if (state.phase === 'offseason') return newSeason(withBailout(state));
+      const settled = withBailout(state);
       let next: UniverseState = {
-        ...state,
+        ...settled,
         currentDay: state.currentDay + 1,
         dayCount: state.dayCount + 1,
-        coins: state.coins + DAILY_STIPEND,
-        ledger: withLedger(state, DAILY_STIPEND, 'Daily fan stipend'),
+        coins: settled.coins + DAILY_STIPEND,
+        ledger: withLedger(settled, DAILY_STIPEND, 'Daily fan stipend'),
         weird: expireMods(state.weird, state.season, state.currentDay + 1),
       };
       const open = currentElection(next);
@@ -462,6 +535,21 @@ export function reduce(state: UniverseState, event: WorldEvent): UniverseState {
 
     case 'backupNoted':
       return { ...state, lastBackupDay: Math.max(state.lastBackupDay, event.day) };
+
+    case 'favoriteTeamSet': {
+      if (favoriteTeamError(state, event.teamId)) return state;
+      return { ...state, persona: { ...state.persona!, favoriteTeamId: event.teamId } };
+    }
+
+    case 'pickSet': {
+      const { playerId, kind } = event;
+      if (pickError(state, playerId, kind)) return state;
+      const back = state.picks.back.filter((id) => id !== playerId);
+      const fade = state.picks.fade.filter((id) => id !== playerId);
+      if (kind === 'back') back.push(playerId);
+      if (kind === 'fade') fade.push(playerId);
+      return { ...state, picks: { back, fade } };
+    }
 
     case 'patronSponsored': {
       if (patronError(state, event.teamId)) return state;
@@ -759,6 +847,11 @@ function newSeason(s: UniverseState): UniverseState {
     started: [],
     playoffs: null,
     patron: null,
+    pickEarnings: 0,
+    picks: {
+      back: s.picks.back.filter((id) => !['departed', 'retired'].includes(playerStatus[id] ?? '')),
+      fade: s.picks.fade.filter((id) => !['departed', 'retired'].includes(playerStatus[id] ?? '')),
+    },
     seasonStats: {},
     statsBySeason: { ...s.statsBySeason, [s.season]: s.seasonStats },
     playerLog,

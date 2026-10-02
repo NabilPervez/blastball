@@ -6,7 +6,7 @@ import { requestPersistenceOnce } from './pwa';
 import { planCatchUp } from '../world/clock';
 import { buildDigest, type Digest } from '../world/digest';
 import type { Persona } from '../world/persona';
-import { createUniverse, reduce, type Command, type UniverseSettings, type UniverseState, type WorldEvent } from '../world/universe';
+import { createUniverse, reduce, unplayedToday, type Command, type UniverseSettings, type UniverseState, type WorldEvent } from '../world/universe';
 
 export type Tab = 'today' | 'games' | 'league' | 'vote' | 'history' | 'settings' | 'guide';
 export type View = 'loading' | 'picker' | 'create' | 'app' | 'intro';
@@ -31,6 +31,12 @@ interface State {
   catchingUp: { done: number; total: number } | null;
 
   catchUp(): Promise<void>;
+  /** The game currently playing live in the "Now playing" ticker. */
+  live: { gameId: string; events: GameEvent[]; shown: number } | null;
+  liveEnabled: boolean;
+  setLiveEnabled(on: boolean): void;
+  /** Advance the live ticker by one play (called on a timer). */
+  liveTick(): Promise<void>;
   dismissDigest(): void;
 
   init(): Promise<void>;
@@ -67,6 +73,8 @@ export const useGame = create<State>((set, get) => ({
   pendingSeed: null,
   digest: null,
   catchingUp: null,
+  live: null,
+  liveEnabled: true,
 
   init: async () => {
     try {
@@ -87,6 +95,7 @@ export const useGame = create<State>((set, get) => ({
         set({ view: 'intro' });
         return;
       }
+      set({ liveEnabled: (await store.getSetting<boolean>('liveTicker')) ?? true });
       const last = await store.getSetting<string>(LAST_UNIVERSE);
       const u = last ? await store.loadUniverse(last) : null;
       if (u) {
@@ -112,7 +121,7 @@ export const useGame = create<State>((set, get) => ({
     const u = createUniverse(crypto.randomUUID(), settings, Date.now(), persona);
     await store.saveUniverse(u);
     await store.setSetting(LAST_UNIVERSE, u.id);
-    set({ u, view: 'app', tab: 'today', watchingGameId: null, detail: null });
+    set({ u, view: 'app', tab: 'today', watchingGameId: null, detail: null, live: null });
   },
 
   openUniverse: async (id) => {
@@ -120,7 +129,7 @@ export const useGame = create<State>((set, get) => ({
       const u = await store.loadUniverse(id);
       if (!u) throw new Error('That universe no longer exists.');
       await store.setSetting(LAST_UNIVERSE, id);
-      set({ u, view: 'app', watchingGameId: null, detail: null, digest: null });
+      set({ u, view: 'app', watchingGameId: null, detail: null, digest: null, live: null });
       await get().catchUp();
     } catch (e) {
       set({ error: message(e) });
@@ -216,6 +225,31 @@ export const useGame = create<State>((set, get) => ({
   },
 
   dismissDigest: () => set({ digest: null }),
+
+  setLiveEnabled: (on) => {
+    set({ liveEnabled: on });
+    void store.setSetting('liveTicker', on);
+  },
+
+  liveTick: async () => {
+    const { u, live, liveEnabled, busy, view } = get();
+    if (!u || view !== 'app' || !liveEnabled || busy || u.phase === 'offseason') return;
+    if (live) {
+      // Finished some other way (watched to the end, Next game, the day ended…): move on.
+      if (u.results[live.gameId]) return set({ live: null });
+      if (live.shown < live.events.length) return set({ live: { ...live, shown: live.shown + 1 } });
+      await get().run({ type: 'playGame', gameId: live.gameId });
+      return set({ live: null });
+    }
+    const next = unplayedToday(u)[0];
+    if (!next) return;
+    // Going live locks betting on this game, exactly like opening it to watch.
+    if (!u.started.includes(next.id)) await get().dispatch({ type: 'gameStarted', gameId: next.id });
+    // The sim is deterministic: this preview is exactly what will be recorded.
+    const events = await sim().replayGame(get().u!, next.id);
+    if (get().live || get().u?.results[next.id]) return;
+    set({ live: { gameId: next.id, events, shown: 1 } });
+  },
 
   clearError: () => set({ error: null }),
 }));

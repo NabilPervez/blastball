@@ -3,6 +3,7 @@ import { formatMult } from '../../engine/odds';
 import { PERSONAS, type Persona } from '../../world/persona';
 import { useGame } from '../store';
 import { PersonaPicker, personaReady } from './PersonaPicker';
+import { FavoriteTeamControl } from './FanFeatures';
 
 export function CoinBadge() {
   const coins = useGame((s) => s.u?.coins ?? 0);
@@ -54,6 +55,7 @@ export function FanCard() {
           {fav ? `${fav.city} ${fav.name} fan · ` : ''}
           {PERSONAS[u.persona.kind].perk}
         </p>
+        <FavoriteTeamControl />
       </div>
       <div className="fan-stats">
         <span>

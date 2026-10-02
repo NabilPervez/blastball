@@ -4,6 +4,7 @@ import { ElectionCard } from '../components/ElectionCard';
 import { InstallBanner } from '../components/InstallBanner';
 import { Bracket, PatronPanel, SeasonAwards } from '../components/SeasonBits';
 import { ChecklistCard } from '../components/Onboarding';
+import { PicksPanel } from '../components/FanFeatures';
 import { BackupReminder, LivingClock, WhileYouWereGone } from '../components/TimeBits';
 import { NewsFeed } from './Vote';
 import { ChoosePersona, FanCard, Ledger, OpenBets } from '../components/Wallet';
@@ -93,6 +94,7 @@ export function Today() {
           Leading the league: <strong>{leaderTeam.city} {leaderTeam.name}</strong> ({leader.wins}–{leader.losses}). The top {u.league.teams.length > 4 ? 4 : 2} teams reach the playoffs after day {maxDay}.
         </p>
       )}
+      {u.persona && <PicksPanel />}
       <PatronPanel />
 
       {yesterday.length > 0 && (

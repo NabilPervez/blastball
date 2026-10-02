@@ -73,6 +73,8 @@ export const migrations: Record<number, Migration> = {
   },
   // v6 → v7: factions hold an opinion of the player.
   6: (save) => ({ ...save, factionOpinion: {} }),
+  // v7 → v8: player picks, favorite-team bonus, bailouts.
+  7: (save) => ({ ...save, picks: { back: [], fade: [] }, pickEarnings: 0, lastBailoutDay: 0 }),
 };
 
 export function migrateSave(raw: unknown): UniverseState {

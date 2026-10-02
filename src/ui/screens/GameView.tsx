@@ -45,7 +45,8 @@ export function GameView({ gameId }: { gameId: string }) {
         return;
       }
       setEvents(evts);
-      setShown(startedPlayed.current || !playable ? evts.length : 1);
+      const ticker = useGame.getState().live;
+      setShown(startedPlayed.current || !playable ? evts.length : ticker?.gameId === gameId ? ticker.shown : 1);
     });
     return () => {
       live = false;

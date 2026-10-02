@@ -10,6 +10,7 @@ import { History } from './screens/History';
 import { CatchUpOverlay } from './components/TimeBits';
 import { Onboarding } from './components/Onboarding';
 import { SwToast } from './components/SwToast';
+import { LiveTicker } from './components/LiveTicker';
 import { Guide } from './screens/Guide';
 import { CreateUniverse, Picker } from './screens/Universes';
 
@@ -63,7 +64,7 @@ function TopBar() {
 }
 
 export function App() {
-  const { view, tab, setTab, init, catchUp, finishIntro } = useGame();
+  const { view, tab, setTab, init, catchUp, finishIntro, liveTick } = useGame();
 
   useEffect(() => {
     init();
@@ -80,6 +81,12 @@ export function App() {
       document.removeEventListener('visibilitychange', onVisible);
     };
   }, [catchUp]);
+
+  // "Now playing": advance the live game by one play every 1.2 seconds.
+  useEffect(() => {
+    const t = setInterval(() => void liveTick(), 1200);
+    return () => clearInterval(t);
+  }, [liveTick]);
 
   if (view === 'loading') return <p className="solo muted">Loading…</p>;
   const toast = <SwToast />;
@@ -119,6 +126,7 @@ export function App() {
       </nav>
       <main className="main">
         <TopBar />
+        <LiveTicker />
         {tab === 'today' && <Today />}
         {tab === 'games' && <Games />}
         {tab === 'league' && <League />}

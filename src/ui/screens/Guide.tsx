@@ -5,7 +5,8 @@ import { ORGANIZER_DISCOUNT_PCT } from '../../world/elections';
 import { FACTION_BUDGET } from '../../world/factions';
 import { DIEHARD_BONUS_PCT, GAMBLER_UNDERDOG_PCT, PERSONAS, type PersonaKind } from '../../world/persona';
 import { FINAL_BEST_OF, SEMIS_BEST_OF } from '../../world/seasons';
-import { DAILY_STIPEND, PATRON_BLESSING, PATRON_COST, PATRON_FROM_SEASON, RULES, STARTING_COINS } from '../../world/universe';
+import { MAX_BACKED, MAX_FADED, PICK_RATES } from '../../world/picks';
+import { BAILOUT_COINS, DAILY_STIPEND, FAVORITE_WIN_BONUS, PATRON_BLESSING, PATRON_COST, PATRON_FROM_SEASON, RULES, STARTING_COINS } from '../../world/universe';
 import { BACKUP_EVERY_DAYS } from '../components/TimeBits';
 import { useGame } from '../store';
 
@@ -19,6 +20,7 @@ const SECTIONS = [
   ['watch', 'Watching games'],
   ['bet', 'Coins & betting'],
   ['persona', 'Fan personas'],
+  ['picks', 'Favorite team & player picks'],
   ['vote', 'Elections & factions'],
   ['weird', 'Weirdness'],
   ['death', 'Death & the Departed'],
@@ -133,6 +135,9 @@ export function Guide() {
       </Section>
 
       <Section id="watch" title="Watching games">
+        <p>
+          <strong>Now playing</strong>: today's games play live, one after another, in a bar at the top of every screen — score, inning, bases, outs and the latest play. Tap it to watch the full feed, or pause it with ❚❚.
+        </p>
         <p>Open any of today's games to watch it pitch by pitch, with a scoreboard, the bases, the count and outs. Choose Live, 2× or 5× speed, pause, or jump to the final with Instant.</p>
         <p>Play-by-play is kept for the last 7 days. <strong>Pin</strong> a finished game to keep its feed forever — find pinned games in History.</p>
         <p className="muted small">Opening a game counts as starting it: bets on that game close.</p>
@@ -143,6 +148,9 @@ export function Guide() {
           You start with {STARTING_COINS} coins and get a {DAILY_STIPEND}-coin stipend every day, so you can never be shut out. Bet on any of today's games before it starts. Odds come only from public information — star ratings, today's starting pitcher and the standings — with a small house edge. A winning bet pays your stake times the multiplier shown.
         </p>
         <p className="muted small">You can add to a bet, but you can't back both sides of the same game.</p>
+        <p>
+          <strong>Broke?</strong> If you run out of coins with no bets still riding, the league office hands you {BAILOUT_COINS} coins to get back in the game (at most once a day).
+        </p>
       </Section>
 
       <Section id="persona" title="Fan personas">
@@ -157,6 +165,22 @@ export function Guide() {
         <p className="muted small">
           Exact numbers: Diehard +{DIEHARD_BONUS_PCT}% of the stake on winning bets for their team; Gambler +{GAMBLER_UNDERDOG_PCT}% on underdog odds; Organizer −{ORGANIZER_DISCOUNT_PCT}% vote prices; the Analyst sees one hidden rating per player; the Prophet gets an exact preview of tonight's strangeness.
         </p>
+      </Section>
+
+      <Section id="picks" title="Favorite team & player picks">
+        <p>
+          <strong>Favorite team</strong>: pick (or change) your team any time during Season 1 from the fan card on Today. Every time they win you get +{FAVORITE_WIN_BONUS} coins. It locks in after Season 1 — choose wisely.
+        </p>
+        <p>
+          <strong>Player picks</strong>: open any player and choose ▲ <em>Back</em> or ▼ <em>Fade</em>. You can back up to {MAX_BACKED} players and fade up to {MAX_FADED}. After every game:
+        </p>
+        <ul className="guide-list">
+          <li>Backed hitter: +{PICK_RATES.backHit} per hit and +{PICK_RATES.backHomeRun} more per home run.</li>
+          <li>Backed pitcher: +{PICK_RATES.backStrikeout} per strikeout thrown.</li>
+          <li>Faded hitter: +{PICK_RATES.fadeStrikeout} per strikeout, +{PICK_RATES.fadeHitless} for a hitless game (3+ at-bats).</li>
+          <li>Faded pitcher: +{PICK_RATES.fadeHitAllowed} per hit and +{PICK_RATES.fadeRunAllowed} per run allowed.</li>
+        </ul>
+        <p className="muted small">Your picks and what they've earned this season are on Today. The League tab's leaderboards show who's hot — hitters and pitchers ranked separately.</p>
       </Section>
 
       <Section id="vote" title="Elections & factions">

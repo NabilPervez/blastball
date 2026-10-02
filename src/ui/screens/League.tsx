@@ -8,6 +8,7 @@ import { TeamBadge } from '../components/bits';
 import { PlayerCard } from '../components/PlayerCard';
 import { ModList, playerModsOf, stadiumModsOf } from '../components/Mods';
 import { PatronPanel } from '../components/SeasonBits';
+import { Leaders, PickButtons } from '../components/FanFeatures';
 import { useGame } from '../store';
 
 const teamOf = (u: UniverseState, id: string) => u.league.teams.find((t) => t.id === id)!;
@@ -347,6 +348,7 @@ function PlayerPage({ u, playerId }: { u: UniverseState; playerId: string }) {
               Departed on season {departure.season}, day {departure.day}: {player.name} {departure.cause}
             </p>
           )}
+          {u.persona && !['departed', 'retired'].includes(u.weird.playerStatus[playerId] ?? '') && <PickButtons player={player} />}
           <h2>Modifiers</h2>
           <ModList mods={playerModsOf(u, playerId)} currentDay={u.currentDay} />
           <h2>Stats</h2>
@@ -378,6 +380,7 @@ export function League() {
       <Search u={u} />
       <h2>Standings</h2>
       <Standings u={u} />
+      <Leaders />
       <HallOfTheDeparted u={u} />
       <h2>Teams</h2>
       <div className="team-tiles">
