@@ -57,6 +57,8 @@ export interface UniverseSettings {
   timeMode: TimeMode;
   /** Living mode: real minutes per in-game day. */
   dayLengthMinutes: DayLengthMinutes;
+  /** Living mode: % of each day before all games start together (default 25). */
+  firstPitchPct?: number;
 }
 
 export type TimelineKind = 'election' | 'death' | 'return' | 'weird' | 'champion' | 'retirement' | 'rivalry' | 'relegation';
@@ -188,6 +190,7 @@ export type WorldEvent =
   | { type: 'weird'; happening: WeirdHappening }
   | { type: 'timeSettingsChanged'; timeMode: TimeMode; dayLengthMinutes: DayLengthMinutes; nowMs: number }
   | { type: 'clockSet'; clock: Clock }
+  | { type: 'firstPitchSet'; pct: number }
   | { type: 'backupNoted'; day: number }
   | { type: 'patronSponsored'; teamId: string }
   | { type: 'favoriteTeamSet'; teamId: string }
@@ -628,6 +631,9 @@ export function reduce(state: UniverseState, event: WorldEvent): UniverseState {
 
     case 'clockSet':
       return state.settings.timeMode === 'living' ? { ...state, clock: event.clock } : state;
+
+    case 'firstPitchSet':
+      return { ...state, settings: { ...state.settings, firstPitchPct: Math.max(0, Math.min(100, event.pct)) } };
 
     case 'backupNoted':
       return { ...state, lastBackupDay: Math.max(state.lastBackupDay, event.day) };

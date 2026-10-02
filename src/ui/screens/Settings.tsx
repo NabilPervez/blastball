@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { exportUniverse, importLeague, leagueFileName } from '../../storage/exportImport';
 import { formatBytes, promptInstall, shareOrDownload, storageInfo, useInstallMode, type StorageInfo } from '../pwa';
 import { useGame } from '../store';
-import { DAY_LENGTHS, type DayLengthMinutes } from '../../world/clock';
+import { DAY_LENGTHS, type DayLengthMinutes, DEFAULT_FIRST_PITCH_PCT, FIRST_PITCH_OPTIONS } from '../../world/clock';
 
 export function InstallHelp() {
   const mode = useInstallMode();
@@ -100,6 +100,20 @@ export function Settings() {
               </button>
             ))}
           </div>
+        )}
+        {u.settings.timeMode === 'living' && (
+          <>
+            <p className="small">
+              <strong>First pitch</strong> — how far into each day every game starts together. Before that, betting is open. Press <em>Play all</em> on Games to start early.
+            </p>
+            <div className="choice-row" role="group" aria-label="First pitch">
+              {FIRST_PITCH_OPTIONS.map((pct) => (
+                <button key={pct} className="chip" aria-pressed={(u.settings.firstPitchPct ?? DEFAULT_FIRST_PITCH_PCT) === pct} onClick={() => dispatch({ type: 'firstPitchSet', pct })}>
+                  {pct === 0 ? 'Start of day' : `${pct}% in`}
+                </button>
+              ))}
+            </div>
+          </>
         )}
       </div>
       <button className="btn" onClick={showPicker}>

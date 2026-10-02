@@ -3,7 +3,7 @@ import type { GameEvent } from '../engine/types';
 import * as store from '../storage/db';
 import { sim } from '../worker/client';
 import { requestPersistenceOnce } from './pwa';
-import { planCatchUp } from '../world/clock';
+import { DEFAULT_FIRST_PITCH_PCT, firstPitchMs, planCatchUp, playsSince } from '../world/clock';
 import { buildDigest, type Digest } from '../world/digest';
 import type { Persona } from '../world/persona';
 import { createUniverse, reduce, unplayedToday, type Command, type UniverseSettings, type UniverseState, type WorldEvent } from '../world/universe';
@@ -257,6 +257,24 @@ export const useGame = create<State>((set, get) => ({
     const { u, live, liveEnabled, busy, view, running, watchingGameId } = get();
     // Games only start when the player kicks them off (Play all, or opening one to watch).
     if (!u || view !== 'app' || busy || !liveEnabled || u.phase === 'offseason') return;
+
+    // Living mode: at first pitch every game starts together — and if the player arrives late,
+    // each game picks up where it would be by the clock.
+    if (u.clock && u.settings.timeMode === 'living') {
+      const start = firstPitchMs(u.clock, u.settings.dayLengthMinutes, u.dayCount, u.settings.firstPitchPct ?? DEFAULT_FIRST_PITCH_PCT);
+      const now = Date.now();
+      const due = now >= start ? unplayedToday(u).filter((g) => !running[g.id] && g.id !== watchingGameId) : [];
+      if (due.length) {
+        const added: State['running'] = {};
+        for (const g of due) {
+          if (!get().u!.started.includes(g.id)) await get().dispatch({ type: 'gameStarted', gameId: g.id });
+          const events = await sim().replayGame(get().u!, g.id);
+          added[g.id] = { events, shown: Math.min(events.length, playsSince(start, now)) };
+        }
+        set({ running: { ...get().running, ...added } });
+        return;
+      }
+    }
 
     // Background games advance one play per tick (the one being watched full-screen drives itself).
     const ids = Object.keys(running);

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { exportUniverse, leagueFileName } from '../../storage/exportImport';
-import { DAY_LENGTHS, formatDuration, msUntilNextDay } from '../../world/clock';
+import { DAY_LENGTHS, DEFAULT_FIRST_PITCH_PCT, firstPitchMs, formatDuration, msUntilNextDay } from '../../world/clock';
 import { isSeasonOver } from '../../world/universe';
 import { shareOrDownload } from '../pwa';
 import { useGame } from '../store';
@@ -25,7 +25,22 @@ export function LivingClock() {
     <p className="living-clock">
       <span className="live-dot" aria-hidden="true" /> Living time · 1 day = {len} · day {u.currentDay} ends in{' '}
       <strong>{formatDuration(msUntilNextDay(u.clock, u.settings.dayLengthMinutes, u.dayCount, now))}</strong>
+      <FirstPitch now={now} />
     </p>
+  );
+}
+
+/** " · first pitch in 4 min" while today's betting window is open (Living mode). */
+export function FirstPitch({ now }: { now: number }) {
+  const u = useGame((s) => s.u)!;
+  if (!u.clock || u.settings.timeMode !== 'living' || isSeasonOver(u)) return null;
+  const start = firstPitchMs(u.clock, u.settings.dayLengthMinutes, u.dayCount, u.settings.firstPitchPct ?? DEFAULT_FIRST_PITCH_PCT);
+  if (now >= start) return null;
+  return (
+    <>
+      {' '}
+      · first pitch in <strong>{formatDuration(start - now)}</strong>
+    </>
   );
 }
 

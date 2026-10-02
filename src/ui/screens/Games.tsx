@@ -5,6 +5,7 @@ import { formatMult } from '../../engine/odds';
 import { BetPanel, MassBet } from '../components/BetPanel';
 import { BaseDiamond, Outs, TeamBadge } from '../components/bits';
 import { useGame } from '../store';
+import { FirstPitch, useNow } from '../components/TimeBits';
 import { describeEvent } from '../../narrative/playByPlay';
 import { GameView } from './GameView';
 
@@ -146,6 +147,7 @@ function PlayAll() {
   const running = useGame((s) => s.running);
   const live = useGame((s) => s.live);
   const [starting, setStarting] = useState(false);
+  const now = useNow(15_000);
   const waiting = unplayedToday(u).filter((g) => !running[g.id] && live?.gameId !== g.id);
   if (isSeasonOver(u) || !unplayedToday(u).length) return null;
   const playing = unplayedToday(u).length - waiting.length;
@@ -162,7 +164,10 @@ function PlayAll() {
       >
         {waiting.length ? `▶ Play all ${waiting.length} game${waiting.length === 1 ? '' : 's'} live` : 'All games are playing'}
       </button>
-      <span className="muted small">{playing > 0 ? `${playing} playing now · tap a game to watch it` : 'Place your bets first — betting closes once a game starts.'}</span>
+      <span className="muted small">
+        {playing > 0 ? `${playing} playing now · tap a game to watch it` : 'Place your bets first — betting closes once a game starts.'}
+        {waiting.length > 0 && <FirstPitch now={now} />}
+      </span>
     </div>
   );
 }

@@ -140,7 +140,7 @@ export function Guide() {
 
       <Section id="watch" title="Watching games">
         <p>
-          <strong>Now playing</strong>: games you start (open one, or press <em>Play all</em> on Games) play live in a bar at the top of every screen. It shows the score, inning, bases, outs and the latest play. Nothing starts on its own, so you can bet first. Tap it to watch the full feed, or pause it with ❚❚.
+          <strong>Now playing</strong>: games you start (open one, or press <em>Play all</em> on Games) play live in a bar at the top of every screen. It shows the score, inning, bases, outs and the latest play. In Manual mode nothing starts on its own. In Living mode every game starts together at <em>first pitch</em> (25% into the day by default — change it in Settings); come back later and they'll be exactly as far along as the clock says. Tap it to watch the full feed, or pause it with ❚❚.
         </p>
         <p>Open any of today's games to watch it pitch by pitch, with a scoreboard, the bases, the count and outs. Choose Live, 2× or 5× speed, pause, or jump to the final with Instant.</p>
         <p>Play-by-play is kept for the last 7 days. <strong>Pin</strong> a finished game to keep its feed forever — find pinned games in History.</p>

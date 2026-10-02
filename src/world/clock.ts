@@ -55,6 +55,23 @@ export function planCatchUp(clock: Clock, dayLengthMinutes: number, currentDay: 
   };
 }
 
+/** Living mode: share of the day (0–100) before every game starts together. Before it: the betting window. */
+export const DEFAULT_FIRST_PITCH_PCT = 25;
+export const FIRST_PITCH_OPTIONS = [0, 25, 50, 75] as const;
+/** Real time between plays when games run live. */
+export const PLAY_MS = 1200;
+
+/** Real time (ms) of today's first pitch. */
+export function firstPitchMs(clock: Clock, dayLengthMinutes: number, currentDay: number, pct: number): number {
+  const dayStart = clock.anchorMs + (currentDay - clock.anchorDay) * dayMs(dayLengthMinutes);
+  return dayStart + Math.round((dayMs(dayLengthMinutes) * pct) / 100);
+}
+
+/** How many plays a game started at first pitch has shown by `nowMs` (at least 1). */
+export function playsSince(startMs: number, nowMs: number): number {
+  return 1 + Math.max(0, Math.floor((nowMs - startMs) / PLAY_MS));
+}
+
 /** Milliseconds until the next in-game day ends. */
 export function msUntilNextDay(clock: Clock, dayLengthMinutes: number, currentDay: number, nowMs: number): number {
   const nextBoundary = clock.anchorMs + (currentDay - clock.anchorDay + 1) * dayMs(dayLengthMinutes);
