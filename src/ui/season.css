@@ -49,3 +49,16 @@
 @media (min-width: 900px) { .topbar-help { display: none; } }
 .topbar-help + .topbar-gear { margin-left: 0; }
 .guide > * { min-width: 0; }
+
+/* Service worker toast */
+.sw-toast {
+  position: fixed; z-index: 45; left: 12px; right: 12px; bottom: calc(var(--nav-h) + 12px + env(safe-area-inset-bottom));
+  display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; padding: 12px 14px;
+  border-color: var(--primary); box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+@media (min-width: 900px) { .sw-toast { left: auto; right: 24px; bottom: 24px; max-width: 460px; } }
+/* Installed app: respect notches and the home indicator. */
+@media (display-mode: standalone) {
+  .main { padding-top: calc(20px + env(safe-area-inset-top)); }
+  .solo { padding-top: calc(32px + env(safe-area-inset-top)); }
+}

@@ -9,6 +9,7 @@ import { Vote } from './screens/Vote';
 import { History } from './screens/History';
 import { CatchUpOverlay } from './components/TimeBits';
 import { Onboarding } from './components/Onboarding';
+import { SwToast } from './components/SwToast';
 import { Guide } from './screens/Guide';
 import { CreateUniverse, Picker } from './screens/Universes';
 
@@ -81,6 +82,7 @@ export function App() {
   }, [catchUp]);
 
   if (view === 'loading') return <p className="solo muted">Loading…</p>;
+  const toast = <SwToast />;
   if (view === 'picker')
     return (
       <>
@@ -88,13 +90,20 @@ export function App() {
         <Picker />
       </>
     );
-  if (view === 'create') return <CreateUniverse />;
+  if (view === 'create')
+    return (
+      <>
+        {toast}
+        <CreateUniverse />
+      </>
+    );
   if (view === 'intro') return <Onboarding onDone={finishIntro} />;
 
   return (
     <div className="app">
       <ErrorBanner />
       <CatchUpOverlay />
+      {toast}
       <nav className="nav" aria-label="Main">
         <div className="brand display">
           BLAST<span>BALL</span>

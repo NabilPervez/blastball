@@ -13,8 +13,38 @@ let deferredPrompt: BeforeInstallPromptEvent | null = null;
 const listeners = new Set<() => void>();
 const notify = () => listeners.forEach((l) => l());
 
+/** Service worker status, for the update / offline-ready toast. */
+let swState: { needRefresh: boolean; offlineReady: boolean } = { needRefresh: false, offlineReady: false };
+let updateSW: ((reload?: boolean) => Promise<void>) | null = null;
+const swListeners = new Set<() => void>();
+const setSw = (patch: Partial<typeof swState>) => {
+  swState = { ...swState, ...patch };
+  swListeners.forEach((l) => l());
+};
+
+export function useSwState() {
+  return useSyncExternalStore(
+    (l) => {
+      swListeners.add(l);
+      return () => swListeners.delete(l);
+    },
+    () => swState,
+  );
+}
+
+export const applyUpdate = () => updateSW?.(true);
+export const dismissSw = () => setSw({ needRefresh: false, offlineReady: false });
+
 export function startPwa() {
-  if ('serviceWorker' in navigator && import.meta.env.PROD) registerSW({ immediate: true });
+  if ('serviceWorker' in navigator && import.meta.env.PROD) {
+    updateSW = registerSW({
+      immediate: true,
+      onNeedRefresh: () => setSw({ needRefresh: true }),
+      onOfflineReady: () => setSw({ offlineReady: true }),
+      // Check for a new version every hour while the app stays open.
+      onRegisteredSW: (_url, reg) => reg && setInterval(() => void reg.update(), 60 * 60 * 1000),
+    });
+  }
   window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
     deferredPrompt = e as BeforeInstallPromptEvent;

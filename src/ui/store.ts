@@ -70,7 +70,12 @@ export const useGame = create<State>((set, get) => ({
 
   init: async () => {
     try {
-      const seed = new URLSearchParams(location.search).get('seed');
+      const params = new URLSearchParams(location.search);
+      // Deep links from home-screen shortcuts, e.g. /?tab=vote
+      const tab = params.get('tab');
+      if (tab && ['today', 'games', 'league', 'vote', 'history', 'settings', 'guide'].includes(tab)) set({ tab: tab as Tab });
+      if (params.has('tab') || params.has('source')) history.replaceState(null, '', location.pathname + (params.has('seed') ? `?seed=${params.get('seed')}` : ''));
+      const seed = params.get('seed');
       if (seed) {
         history.replaceState(null, '', location.pathname);
         set({ universes: await store.listUniverses() });
@@ -115,7 +120,7 @@ export const useGame = create<State>((set, get) => ({
       const u = await store.loadUniverse(id);
       if (!u) throw new Error('That universe no longer exists.');
       await store.setSetting(LAST_UNIVERSE, id);
-      set({ u, view: 'app', tab: 'today', watchingGameId: null, detail: null, digest: null });
+      set({ u, view: 'app', watchingGameId: null, detail: null, digest: null });
       await get().catchUp();
     } catch (e) {
       set({ error: message(e) });

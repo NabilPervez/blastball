@@ -19,7 +19,7 @@ export default tseslint.config(
   },
   {
     files: ['scripts/**'],
-    languageOptions: { globals: globals.node },
+    languageOptions: { globals: { ...globals.node, ...globals.browser } }, // scripts drive a headless browser
   },
   {
     // The engine and world generator are pure: no UI, storage, or worker imports.

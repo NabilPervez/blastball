@@ -7,8 +7,8 @@
           <stop offset="0" stop-color="#FFC27A"/><stop offset="0.45" stop-color="#FF7A1A"/><stop offset="1" stop-color="#C9480A"/>
         </radialGradient>
       </defs>
-      <rect width="512" height="512" rx="112" fill="url(#glow)"/>
-    <g transform="translate(0.00 0.00) scale(1)"><circle cx="256" cy="262" r="150" fill="#000" opacity="0.35"/>
+      <rect width="512" height="512"  fill="url(#glow)"/>
+    <g transform="translate(46.08 46.08) scale(0.82)"><circle cx="256" cy="262" r="150" fill="#000" opacity="0.35"/>
        <circle cx="256" cy="256" r="150" fill="url(#ball)"/>
        <path d="M178 132 C 238 196, 238 316, 178 380" fill="none" stroke="#0B0B0F" stroke-width="16" stroke-linecap="round"/>
       <path d="M334 132 C 274 196, 274 316, 334 380" fill="none" stroke="#0B0B0F" stroke-width="16" stroke-linecap="round"/>
