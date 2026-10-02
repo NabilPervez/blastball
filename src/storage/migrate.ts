@@ -1,4 +1,5 @@
 import { createFactions } from '../world/factions';
+import { createStadiums } from '../world/weird';
 import { SAVE_VERSION, type UniverseState } from '../world/universe';
 
 /** Raised when a save was written by a newer version of the game than this one. */
@@ -24,6 +25,12 @@ export const migrations: Record<number, Migration> = {
     const settings = save.settings as { seed: string };
     const league = save.league as { teams: { id: string }[] };
     return { ...save, factions: createFactions(settings.seed, league.teams.map((t) => t.id)), elections: [], news: [] };
+  },
+  // v3 → v4 (Sprint 6): weirdness — modifiers, stadiums, the Departed.
+  3: (save) => {
+    const settings = save.settings as { seed: string };
+    const league = save.league as Parameters<typeof createStadiums>[1];
+    return { ...save, weird: { playerStatus: {}, playerMods: {}, stadiums: createStadiums(settings.seed, league), departed: [] } };
   },
 };
 

@@ -11,7 +11,9 @@ export type ProposalEffect =
   | { kind: 'statusQuo' }
   | { kind: 'teamBoost'; teamId: string; keys: RatingKey[]; amount: number }
   | { kind: 'leagueBoost'; keys: RatingKey[]; amount: number }
-  | { kind: 'trade'; teamA: string; teamB: string; slot: number };
+  | { kind: 'trade'; teamA: string; teamB: string; slot: number }
+  /** Bring a departed player back. The only way anyone ever returns. */
+  | { kind: 'resurrect'; playerId: string };
 
 export interface Proposal {
   title: string;
@@ -76,7 +78,16 @@ const teamLabel = (league: League, id: string) => {
 };
 
 /** Generate 3 proposals: always "Keep things as they are" plus two from the pool, using public standings. */
-export function generateProposals(league: League, standings: FactionView['standings'], seedParts: (string | number)[]): Proposal[] {
+export interface DepartedRef {
+  playerId: string;
+  name: string;
+  teamId: string;
+}
+
+/** Chance (per mille) an election offers to bring back one of the Departed, when any exist. */
+export const RESURRECTION_OFFER_PM = 450;
+
+export function generateProposals(league: League, standings: FactionView['standings'], seedParts: (string | number)[], departed: DepartedRef[] = []): Proposal[] {
   const rng = createRng(...seedParts, 'proposals');
   const leader = standings[0].teamId;
   const last = standings[standings.length - 1].teamId;
@@ -148,6 +159,18 @@ export function generateProposals(league: League, standings: FactionView['standi
   const first = rng.int(pool.length);
   let second = rng.int(pool.length - 1);
   if (second >= first) second++;
+  const firstProposal = pool[first]();
+  let third = pool[second]();
+  if (departed.length && rng.chance(RESURRECTION_OFFER_PM)) {
+    const d = rng.pick(departed);
+    third = {
+      title: `Bring Back ${d.name}`,
+      description: `${d.name} returns from the Departed to the ${teamLabel(league, d.teamId)}. They will come back changed.`,
+      tags: { history: 2, chaos: 1 },
+      teamImpact: { [d.teamId]: 1 },
+      effect: { kind: 'resurrect', playerId: d.playerId },
+    };
+  }
   return [
     {
       title: 'Keep Things As They Are',
@@ -156,8 +179,8 @@ export function generateProposals(league: League, standings: FactionView['standi
       teamImpact: {},
       effect: { kind: 'statusQuo' },
     },
-    pool[first](),
-    pool[second](),
+    firstProposal,
+    third,
   ];
 }
 
@@ -169,9 +192,10 @@ export function openElection(
   season: number,
   openedDay: number,
   lastDay: number,
+  departed: DepartedRef[] = [],
 ): Election {
   const seedParts = [league.seed, season, 'election', id];
-  const proposals = generateProposals(league, standings, seedParts);
+  const proposals = generateProposals(league, standings, seedParts, departed);
   const views = proposals.map((proposal) => ({ standings, proposal }));
   return {
     id,
@@ -218,6 +242,7 @@ export function applyEffect(league: League, effect: ProposalEffect): { league: L
 
   switch (effect.kind) {
     case 'statusQuo':
+    case 'resurrect': // handled by the universe, which owns the Departed
       return { league, notes };
     case 'teamBoost': {
       const t = league.teams.find((x) => x.id === effect.teamId)!;

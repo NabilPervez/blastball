@@ -16,7 +16,7 @@ function roll(rng: Rng, bias = 0): number {
   return v < 0 ? 0 : v > 100 ? 100 : v;
 }
 
-function makeRatings(rng: Rng, role: Role): Ratings {
+export function makeRatings(rng: Rng, role: Role): Ratings {
   const r = {} as Ratings;
   for (const k of RATING_KEYS) {
     const primary = role === 'batter' ? BATTING_KEYS.includes(k) : PITCHING_KEYS.includes(k);
@@ -91,6 +91,23 @@ export function generateLeague({ seed, name = 'The Blastball League', teamCount 
   }
 
   return { seed, name, teams, players };
+}
+
+/** A name not already used in the league. */
+export function uniqueName(rng: Rng, used: Set<string>): string {
+  for (let i = 0; ; i++) {
+    const n = `${rng.pick(names.firstNames)} ${rng.pick(names.lastNames)}`;
+    const name = i < 50 ? n : `${n} ${['II', 'III', 'IV', 'V'][i % 4]}`;
+    if (!used.has(name)) {
+      used.add(name);
+      return name;
+    }
+  }
+}
+
+/** A fresh rookie to fill a roster slot (e.g. after a player departs). */
+export function makeRookie(rng: Rng, id: string, teamId: string, role: Role, position: string, used: Set<string>): Player {
+  return { id, name: uniqueName(rng, used), teamId, role, position, ratings: makeRatings(rng, role) };
 }
 
 /** A fresh shareable seed derived from a caller-supplied entropy string (e.g. the current time). */

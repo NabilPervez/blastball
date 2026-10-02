@@ -4,6 +4,7 @@ import { stars } from '../../engine/season';
 import type { Player, Team } from '../../engine/types';
 import { RARITY_LABEL, type Rarity } from '../../world/rarity';
 import { Stars } from './bits';
+import { ModIcons, type ShownMod } from './Mods';
 
 /** Procedural geometric portrait: same player id ⇒ same art, works offline, scales to any roster size. */
 export function CardArt({ player, team }: { player: Player; team: Team }) {
@@ -59,10 +60,11 @@ interface CardProps {
   back?: ReactNode;
   /** Extra line under the star groups (e.g. an Analyst's revealed hidden stat). */
   extra?: ReactNode;
+  mods?: ShownMod[];
   onOpen?: () => void;
 }
 
-export function PlayerCard({ player, team, rarity, size = 'sm', back, extra, onOpen }: CardProps) {
+export function PlayerCard({ player, team, rarity, size = 'sm', back, extra, mods = [], onOpen }: CardProps) {
   const [flipped, setFlipped] = useState(false);
   const pitcher = player.role === 'pitcher';
   const groups = pitcher
@@ -75,6 +77,7 @@ export function PlayerCard({ player, team, rarity, size = 'sm', back, extra, onO
         <CardArt player={player} team={team} />
         <span className="pc-pos">{player.position}</span>
         <span className={`pc-rarity r-${rarity}`}>{RARITY_LABEL[rarity]}</span>
+        <ModIcons mods={mods} />
       </div>
       <div className="pc-body">
         <strong className="pc-name display">{player.name}</strong>

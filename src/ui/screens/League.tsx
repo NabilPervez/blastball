@@ -7,9 +7,39 @@ import { rarityOf } from '../../world/rarity';
 import type { UniverseState } from '../../world/universe';
 import { TeamBadge } from '../components/bits';
 import { PlayerCard } from '../components/PlayerCard';
+import { ModList, playerModsOf, stadiumModsOf } from '../components/Mods';
 import { useGame } from '../store';
 
 const teamOf = (u: UniverseState, id: string) => u.league.teams.find((t) => t.id === id)!;
+
+const STATUS_LABEL: Record<string, string> = { active: 'Active', departed: 'Departed', returned: 'Returned', reserve: 'Reserve' };
+
+function HallOfTheDeparted({ u }: { u: UniverseState }) {
+  const showDetail = useGame((s) => s.showDetail);
+  const gone = u.weird.departed.filter((d) => u.weird.playerStatus[d.playerId] === 'departed');
+  if (!u.weird.departed.length) return null;
+  return (
+    <>
+      <h2>Hall of the Departed</h2>
+      {gone.length === 0 ? (
+        <p className="muted">Empty, for now. Everyone who left has come back.</p>
+      ) : (
+        <div className="card-grid">
+          {gone.map((d) => (
+            <PlayerCard
+              key={d.playerId}
+              player={u.league.players[d.playerId]}
+              team={teamOf(u, d.teamId)}
+              rarity="departed"
+              onOpen={() => showDetail({ kind: 'player', id: d.playerId })}
+              extra={<span className="muted small">Season {d.season}, day {d.day}</span>}
+            />
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
 
 /** The Analyst persona sees one extra hidden rating on each card. */
 function analystExtra(u: UniverseState, player: Player) {
@@ -100,10 +130,13 @@ function TeamPage({ u, teamId }: { u: UniverseState; teamId: string }) {
   const showDetail = useGame((s) => s.showDetail);
   const team = teamOf(u, teamId);
   const row = computeStandings(u.league.teams, Object.values(u.results)).find((r) => r.teamId === teamId)!;
+  const reserves = Object.entries(u.weird.playerStatus)
+    .filter(([id, st]) => st === 'reserve' && u.league.players[id].teamId === teamId)
+    .map(([id]) => id);
   const grid = (ids: string[]) => (
     <div className="card-grid">
       {ids.map((id) => (
-        <PlayerCard key={id} player={u.league.players[id]} team={team} rarity={rarityOf(u, id)} extra={analystExtra(u, u.league.players[id])} onOpen={() => showDetail({ kind: 'player', id })} />
+        <PlayerCard key={id} player={u.league.players[id]} team={team} rarity={rarityOf(u, id)} extra={analystExtra(u, u.league.players[id])} mods={playerModsOf(u, id)} onOpen={() => showDetail({ kind: 'player', id })} />
       ))}
     </div>
   );
@@ -126,6 +159,18 @@ function TeamPage({ u, teamId }: { u: UniverseState; teamId: string }) {
       {grid(team.lineup)}
       <h2>Rotation</h2>
       {grid(team.rotation)}
+      {reserves.length > 0 && (
+        <>
+          <h2>Reserves</h2>
+          <p className="muted small">Players who lost their spot when someone came back from the Departed.</p>
+          {grid(reserves)}
+        </>
+      )}
+      <h2>Home stadium</h2>
+      <div className="card pad stack">
+        <strong className="display">{u.weird.stadiums[teamId]?.name ?? 'Unknown grounds'}</strong>
+        <ModList mods={stadiumModsOf(u, teamId)} currentDay={u.currentDay} />
+      </div>
     </section>
   );
 }
@@ -208,6 +253,7 @@ function PlayerPage({ u, playerId }: { u: UniverseState; playerId: string }) {
   const team = teamOf(u, player.teamId);
   const season = u.seasonStats[playerId] ?? emptyLine();
   const career = u.careerStats[playerId] ?? emptyLine();
+  const departure = u.weird.playerStatus[playerId] === 'departed' ? [...u.weird.departed].reverse().find((d) => d.playerId === playerId) : undefined;
   return (
     <section>
       <button className="link-btn" onClick={() => showDetail({ kind: 'team', id: team.id })}>
@@ -220,6 +266,7 @@ function PlayerPage({ u, playerId }: { u: UniverseState; playerId: string }) {
           rarity={rarityOf(u, playerId)}
           size="lg"
           extra={analystExtra(u, player)}
+          mods={playerModsOf(u, playerId)}
           back={
             <div className="pc-back-body">
               <strong className="display">{player.name}</strong>
@@ -231,8 +278,15 @@ function PlayerPage({ u, playerId }: { u: UniverseState; playerId: string }) {
         <div className="player-info">
           <h1 className="display">{player.name}</h1>
           <p className="muted">
-            {player.position} · {team.city} {team.name} · Active
+            {player.position} · {team.city} {team.name} · {STATUS_LABEL[u.weird.playerStatus[playerId] ?? 'active']}
           </p>
+          {departure && (
+            <p className="departed-note">
+              Departed on season {departure.season}, day {departure.day}: {player.name} {departure.cause}
+            </p>
+          )}
+          <h2>Modifiers</h2>
+          <ModList mods={playerModsOf(u, playerId)} currentDay={u.currentDay} />
           <h2>Stats</h2>
           <div className="card table-wrap">
             <StatTable player={player} season={season} career={career} />
@@ -261,6 +315,7 @@ export function League() {
       <Search u={u} />
       <h2>Standings</h2>
       <Standings u={u} />
+      <HallOfTheDeparted u={u} />
       <h2>Teams</h2>
       <div className="team-tiles">
         {u.league.teams.map((t) => (

@@ -6,6 +6,7 @@ import './ui/styles.css';
 import './ui/cards.css';
 import './ui/economy.css';
 import './ui/vote.css';
+import './ui/weird.css';
 
 startPwa();
 

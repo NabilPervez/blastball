@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { computeStandings } from '../../engine/season';
-import { gamesOn, isSeasonOver, seasonDays } from '../../world/universe';
+import { gamesOn, isSeasonOver, prophecy, seasonDays } from '../../world/universe';
 import { ElectionCard } from '../components/ElectionCard';
 import { InstallBanner } from '../components/InstallBanner';
 import { NewsFeed } from './Vote';
@@ -47,6 +47,12 @@ export function Today() {
       <ChoosePersona />
       <FanCard />
       <ElectionCard />
+      {prophecy(u) && (
+        <div className="card pad prophecy" role="note">
+          <p className="eyebrow">The Prophet senses…</p>
+          <p>{prophecy(u)}</p>
+        </div>
+      )}
 
       {over ? (
         <div className="card callout">

@@ -125,11 +125,13 @@ describe('elections', () => {
 });
 
 describe('save fixtures', () => {
-  it('a real v3 save (Sprint 5) loads unchanged and keeps voting', async () => {
+  it('a real v3 save (Sprint 5) migrates and keeps voting', async () => {
     const { migrateSave } = await import('../src/storage/migrate');
     const raw = (await import('./fixtures/save-v3.json')).default;
     const u = migrateSave(structuredClone(raw));
-    expect(u).toEqual(raw);
+    expect(u.elections).toEqual(raw.elections);
+    expect(u.coins).toBe(raw.coins);
+    expect(Object.keys(u.weird.stadiums)).toHaveLength(4);
     expect(u.elections[0].result).not.toBeNull();
     const e = currentElection(u)!;
     expect(reduce(u, { type: 'votesBought', electionId: e.id, proposal: 0, count: 1 }).coins).toBe(u.coins - 1);

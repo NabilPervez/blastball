@@ -11,6 +11,7 @@ import {
   offeredMultiplier,
   reduce,
   runCommand,
+  SAVE_VERSION,
   STARTING_COINS,
   unplayedToday,
   type UniverseSettings,
@@ -144,7 +145,7 @@ describe('save migration v1 → v2', () => {
   it('old saves load with a starting coin balance and no persona yet', async () => {
     const raw = (await import('./fixtures/save-v1.json')).default;
     const u = migrateSave(structuredClone(raw));
-    expect(u.saveVersion).toBe(3);
+    expect(u.saveVersion).toBe(SAVE_VERSION);
     expect(u.coins).toBe(100);
     expect(u.bets).toEqual([]);
     expect(u.persona).toBeNull();

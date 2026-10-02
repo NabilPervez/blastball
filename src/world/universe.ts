@@ -7,13 +7,17 @@ import { applyEffect, marginalCost, openElection, playerVoteTotal, tally, winner
 import { createFactions, type Faction } from './factions';
 import { generateLeague } from './generate';
 import { personaMultiplier, winningPayout, type Persona } from './persona';
+import { applyHappening, createStadiums, DEFAULT_PACKS, effectiveLeague, expireMods, mergePacks, resurrect, rollDay, type WeirdHappening, type WeirdState } from './weird';
+
+/** The active rule packs (data-driven weirdness). */
+export const RULES = mergePacks(DEFAULT_PACKS);
 
 /**
  * A universe is one save: settings + league + season progress. All changes go through
  * `reduce(state, event)`, so the same events always produce the same state.
  */
 
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 
 export const STARTING_COINS = 100;
 /** Small daily allowance so a broke fan can always get back in the game. */
@@ -95,6 +99,8 @@ export interface UniverseState {
   elections: Election[];
   /** Headlines: faction reactions, election results. Newest last. */
   news: NewsItem[];
+  /** Modifiers, stadiums, the Departed. */
+  weird: WeirdState;
 }
 
 export interface NewsItem {
@@ -109,7 +115,8 @@ export type WorldEvent =
   | { type: 'dayEnded'; day: number }
   | { type: 'personaChosen'; persona: Persona }
   | { type: 'betPlaced'; gameId: string; teamId: string; amount: number }
-  | { type: 'votesBought'; electionId: number; proposal: number; count: number };
+  | { type: 'votesBought'; electionId: number; proposal: number; count: number }
+  | { type: 'weird'; happening: WeirdHappening };
 
 export function createUniverse(id: string, settings: UniverseSettings, now: number, persona: Persona | null = null): UniverseState {
   const league = generateLeague({ seed: settings.seed, name: settings.name, teamCount: settings.leagueSize });
@@ -135,6 +142,7 @@ export function createUniverse(id: string, settings: UniverseSettings, now: numb
     factions: createFactions(settings.seed, league.teams.map((t) => t.id)),
     elections: [],
     news: [],
+    weird: { playerStatus: {}, playerMods: {}, stadiums: createStadiums(settings.seed, league), departed: [] },
   };
   return withNewElection(base, 1);
 }
@@ -198,7 +206,10 @@ const publicStandings = (s: UniverseState) =>
 /** Open the next weekly election starting on `openedDay` (no-op past the end of the season). */
 export function withNewElection(s: UniverseState, openedDay: number): UniverseState {
   if (openedDay > seasonDays(s)) return s;
-  const e = openElection(s.league, s.factions, publicStandings(s), s.elections.length + 1, s.season, openedDay, seasonDays(s));
+  const departed = s.weird.departed
+    .filter((d) => s.weird.playerStatus[d.playerId] === 'departed')
+    .map((d) => ({ playerId: d.playerId, name: s.league.players[d.playerId].name, teamId: d.teamId }));
+  const e = openElection(s.league, s.factions, publicStandings(s), s.elections.length + 1, s.season, openedDay, seasonDays(s), departed);
   // The faction most committed to a single proposal makes the headline.
   let loudest = s.factions[0];
   let loudestPick = 0;
@@ -239,11 +250,20 @@ function resolveElection(s: UniverseState, e: Election, day: number): UniverseSt
   const totals = tally(e);
   const winner = winnerOf(totals);
   const proposal = e.proposals[winner];
-  const { league, notes } = applyEffect(s.league, proposal.effect);
+  let { league, notes } = applyEffect(s.league, proposal.effect);
+  let weird = s.weird;
+  const headlines = [`Election #${e.id}: “${proposal.title}” wins with ${totals[winner]} votes.`];
+  if (proposal.effect.kind === 'resurrect') {
+    const back = resurrect(league, weird, proposal.effect.playerId, s.settings.seed, RULES);
+    league = back.league;
+    weird = back.weird;
+    const name = league.players[proposal.effect.playerId].name;
+    notes = [...notes, { playerId: proposal.effect.playerId, text: `Returned from the Departed by election — changed: ${back.modName}.` }];
+    headlines.push(`${name} has returned. They are not quite the same: ${back.modName}.`);
+  }
   const playerLog = { ...s.playerLog };
   for (const n of notes) playerLog[n.playerId] = [...(playerLog[n.playerId] ?? []), { season: s.season, day, text: n.text }];
 
-  const headlines = [`Election #${e.id}: “${proposal.title}” wins with ${totals[winner]} votes.`];
   if (playerVoteTotal(e) > 0) {
     const without = tally({ ...e, playerVotes: e.playerVotes.map(() => 0) });
     const fan = s.persona?.fanName || 'A mysterious fan';
@@ -252,7 +272,7 @@ function resolveElection(s: UniverseState, e: Election, day: number): UniverseSt
   }
 
   const elections = s.elections.map((x) => (x.id === e.id ? { ...x, result: { winner, totals } } : x));
-  return { ...s, league, playerLog, elections, news: withNews(s, headlines, day) };
+  return { ...s, league, weird, playerLog, elections, news: withNews(s, headlines, day) };
 }
 
 /** Story-worthy notes for a player's life timeline, from one game's box score. */
@@ -309,6 +329,7 @@ export function reduce(state: UniverseState, event: WorldEvent): UniverseState {
         currentDay: state.currentDay + 1,
         coins: state.coins + DAILY_STIPEND,
         ledger: withLedger(state, DAILY_STIPEND, 'Daily fan stipend'),
+        weird: expireMods(state.weird, state.season, state.currentDay + 1),
       };
       const open = currentElection(next);
       if (open && open.closesDay <= event.day) {
@@ -318,6 +339,22 @@ export function reduce(state: UniverseState, event: WorldEvent): UniverseState {
         next = withNewElection(next, event.day + 1); // e.g. saves from before elections existed
       }
       return next;
+    }
+
+    case 'weird': {
+      const h = event.happening;
+      const { league, weird } = applyHappening(state.league, state.weird, h, state.season, state.currentDay);
+      const playerLog = { ...state.playerLog };
+      const note = (id: string, text: string) => (playerLog[id] = [...(playerLog[id] ?? []), { season: state.season, day: state.currentDay, text }]);
+      for (const c of h.changes) {
+        if (c.kind === 'addPlayerMod') note(c.playerId, h.text);
+        if (c.kind === 'ratings' && c.playerIds.length === 1) note(c.playerIds[0], h.text);
+        if (c.kind === 'death') {
+          note(c.playerId, `Departed: ${c.cause}`);
+          note(c.replacement.id, `Called up to replace ${state.league.players[c.playerId].name}.`);
+        }
+      }
+      return { ...state, league, weird, playerLog, news: withNews(state, [h.text]) };
     }
 
     case 'votesBought': {
@@ -400,7 +437,7 @@ export function runCommand(start: UniverseState, cmd: Command): CommandResult {
 
   const play = (game: ScheduledGame) => {
     if (state.results[game.id]) return;
-    const result = simulateGame(state.league, game, state.season);
+    const result = simulateGame(effectiveLeague(state.league, state.weird, game, state.season, RULES), game, state.season);
     apply({
       type: 'gamePlayed',
       summary: {
@@ -420,6 +457,7 @@ export function runCommand(start: UniverseState, cmd: Command): CommandResult {
   const endDay = () => {
     if (isSeasonOver(state)) return;
     unplayedToday(state).forEach(play);
+    for (const happening of rollDay(rollInput(state), RULES)) apply({ type: 'weird', happening });
     apply({ type: 'dayEnded', day: state.currentDay });
   };
 
@@ -454,5 +492,30 @@ export function runCommand(start: UniverseState, cmd: Command): CommandResult {
 /** Recreate a game's play-by-play from its seed (works for any game, since the sim is deterministic). */
 export function replayGame(state: UniverseState, gameId: string): GameEvent[] {
   const game = state.schedule.find((g) => g.id === gameId)!;
-  return simulateGame(state.league, game, state.season).events;
+  return simulateGame(effectiveLeague(state.league, state.weird, game, state.season, RULES), game, state.season).events;
+}
+
+const rollInput = (s: UniverseState) => ({
+  league: s.league,
+  weird: s.weird,
+  seed: s.settings.seed,
+  season: s.season,
+  day: s.currentDay,
+  seasonDays: seasonDays(s),
+  chaos: s.settings.chaos,
+});
+
+/** The Prophet persona's hint: what is gathering tonight (an exact preview of today's roll). */
+export function prophecy(s: UniverseState): string | null {
+  if (s.persona?.kind !== 'prophet' || isSeasonOver(s)) return null;
+  const happenings = rollDay(rollInput(s), RULES);
+  if (!happenings.length) return 'The air is still. Nothing strange is gathering tonight.';
+  return happenings
+    .map((h) => {
+      const t = s.league.teams.find((x) => x.id === h.teamId)!;
+      return h.eventId === 'death'
+        ? `A cold wind blows through the ${t.city} ${t.name} dugout. Someone may not see tomorrow.`
+        : `Something strange is gathering around the ${t.city} ${t.name} tonight.`;
+    })
+    .join(' ');
 }
