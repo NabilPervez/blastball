@@ -8,7 +8,7 @@ import { createUniverse, runCommand } from '../src/world/universe';
 let n = 0;
 const setup = async () => {
   const d = new BlastballDB(`exp-${Date.now()}-${++n}`);
-  const u = createUniverse('u1', { name: 'Round Trip', seed: 'rt', leagueSize: 8, seasonLength: 20, chaos: 'normal', timeMode: 'manual' }, 0);
+  const u = createUniverse('u1', { name: 'Round Trip', seed: 'rt', leagueSize: 8, seasonLength: 20, chaos: 'normal', timeMode: 'manual', dayLengthMinutes: 60 }, 0);
   await saveUniverse(u, d);
   const r = runCommand(u, { type: 'simDays', count: 4 });
   await persistCommand(u, r, d);

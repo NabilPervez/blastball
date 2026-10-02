@@ -5,7 +5,7 @@ import { createUniverse, currentElection, prophecy, reduce, runCommand, type Uni
 import { DEFAULT_PACKS, effectiveLeague, mergePacks, rollDay, validatePack } from '../src/world/weird';
 
 const settings = (seed: string, p: Partial<UniverseSettings> = {}): UniverseSettings => ({
-  name: 'Weird', seed, leagueSize: 8, seasonLength: 20, chaos: 'normal', timeMode: 'manual', ...p,
+  name: 'Weird', seed, leagueSize: 8, seasonLength: 20, chaos: 'normal', timeMode: 'manual', dayLengthMinutes: 60, ...p,
 });
 
 const deathsIn = (u: UniverseState) => u.weird.departed.length;
@@ -158,11 +158,16 @@ describe('weirdness in a season', () => {
 });
 
 describe('save fixtures', () => {
-  it('a real v4 save (Sprint 6) loads unchanged and keeps playing', async () => {
+  it('a real v4 save (Sprint 6) migrates to v5 and keeps playing', async () => {
     const { migrateSave } = await import('../src/storage/migrate');
     const raw = (await import('./fixtures/save-v4.json')).default;
     const u = migrateSave(structuredClone(raw));
-    expect(u).toEqual(raw);
+    expect(u.weird).toEqual(raw.weird);
+    expect(u.settings.dayLengthMinutes).toBe(60);
+    expect(u.clock).toBeNull();
+    // Timeline backfilled from past elections and deaths.
+    expect(u.timeline.filter((t) => t.kind === 'election')).toHaveLength(raw.elections.filter((e) => e.result).length);
+    expect(u.timeline.filter((t) => t.kind === 'death')).toHaveLength(raw.weird.departed.length);
     expect(runCommand(u, { type: 'endDay' }).state.currentDay).toBe(14);
   });
 });

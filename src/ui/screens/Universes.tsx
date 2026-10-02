@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { PersonaPicker, personaReady } from '../components/PersonaPicker';
 import type { Persona } from '../../world/persona';
 import { generateLeague, newSeed } from '../../world/generate';
+import { DAY_LENGTHS } from '../../world/clock';
 import { LEAGUE_SIZES, SEASON_LENGTHS, type ChaosLevel, type UniverseSettings } from '../../world/universe';
 import { useGame } from '../store';
 
@@ -77,7 +78,8 @@ export function CreateUniverse() {
     leagueSize: 8,
     seasonLength: 20,
     chaos: 'normal',
-    timeMode: 'manual',
+    timeMode: 'living',
+    dayLengthMinutes: 60,
   }));
   const patch = (p: Partial<UniverseSettings>) => setS((prev) => ({ ...prev, ...p }));
   const [persona, setPersona] = useState<Persona>({ kind: 'diehard', fanName: '', favoriteTeamId: null });
@@ -114,8 +116,20 @@ export function CreateUniverse() {
         <Choice label="Teams" value={s.leagueSize} options={LEAGUE_SIZES.map((n) => ({ id: n, label: String(n) }))} onChange={(leagueSize) => patch({ leagueSize })} />
         <Choice label="Season length (games per team)" value={s.seasonLength} options={SEASON_LENGTHS.map((n) => ({ id: n, label: String(n) }))} onChange={(seasonLength) => patch({ seasonLength })} />
         <Choice label="Chaos" value={s.chaos} options={CHAOS} onChange={(chaos) => patch({ chaos })} />
+        <Choice
+          label="Time"
+          value={s.timeMode}
+          options={[
+            { id: 'living', label: 'Living — plays on its own' },
+            { id: 'manual', label: 'Manual — you advance it' },
+          ]}
+          onChange={(timeMode) => patch({ timeMode })}
+        />
+        {s.timeMode === 'living' && (
+          <Choice label="One in-game day lasts" value={s.dayLengthMinutes} options={DAY_LENGTHS.map((d) => ({ id: d.minutes, label: d.label }))} onChange={(dayLengthMinutes) => patch({ dayLengthMinutes })} />
+        )}
         <PersonaPicker value={{ ...persona, favoriteTeamId: validFavorite }} onChange={setPersona} teams={teams} />
-        <p className="muted small">Chaos takes effect when weirdness arrives (rules, modifiers, the occasional death). Time mode is Manual for now — Living mode arrives later.</p>
+        <p className="muted small">Chaos controls how often strange things happen — modifiers, stadium changes, the occasional death.</p>
         <div className="row">
           <button className="btn primary" type="submit" disabled={!personaReady(finalPersona)}>
             Create universe

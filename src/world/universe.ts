@@ -3,6 +3,7 @@ import { ENGINE_VERSION, simulateGame } from '../engine/game';
 import { oddsForGame } from '../engine/odds';
 import { computeStandings, generateSchedule } from '../engine/season';
 import type { GameEvent, League, ScheduledGame } from '../engine/types';
+import type { Clock, DayLengthMinutes } from './clock';
 import { applyEffect, marginalCost, openElection, playerVoteTotal, tally, winnerOf, type Election } from './elections';
 import { createFactions, type Faction } from './factions';
 import { generateLeague } from './generate';
@@ -17,7 +18,7 @@ export const RULES = mergePacks(DEFAULT_PACKS);
  * `reduce(state, event)`, so the same events always produce the same state.
  */
 
-export const SAVE_VERSION = 4;
+export const SAVE_VERSION = 5;
 
 export const STARTING_COINS = 100;
 /** Small daily allowance so a broke fan can always get back in the game. */
@@ -36,6 +37,18 @@ export interface UniverseSettings {
   seasonLength: (typeof SEASON_LENGTHS)[number];
   chaos: ChaosLevel;
   timeMode: TimeMode;
+  /** Living mode: real minutes per in-game day. */
+  dayLengthMinutes: DayLengthMinutes;
+}
+
+export type TimelineKind = 'election' | 'death' | 'return' | 'weird' | 'champion';
+
+/** Notable world events, kept forever (unlike the capped news feed). */
+export interface TimelineEntry {
+  season: number;
+  day: number;
+  kind: TimelineKind;
+  text: string;
 }
 
 export interface GameSummary {
@@ -101,6 +114,11 @@ export interface UniverseState {
   news: NewsItem[];
   /** Modifiers, stadiums, the Departed. */
   weird: WeirdState;
+  /** Living mode clock; null in Manual mode. */
+  clock: Clock | null;
+  timeline: TimelineEntry[];
+  /** Day the player last exported (or dismissed the backup reminder). */
+  lastBackupDay: number;
 }
 
 export interface NewsItem {
@@ -116,7 +134,10 @@ export type WorldEvent =
   | { type: 'personaChosen'; persona: Persona }
   | { type: 'betPlaced'; gameId: string; teamId: string; amount: number }
   | { type: 'votesBought'; electionId: number; proposal: number; count: number }
-  | { type: 'weird'; happening: WeirdHappening };
+  | { type: 'weird'; happening: WeirdHappening }
+  | { type: 'timeSettingsChanged'; timeMode: TimeMode; dayLengthMinutes: DayLengthMinutes; nowMs: number }
+  | { type: 'clockSet'; clock: Clock }
+  | { type: 'backupNoted'; day: number };
 
 export function createUniverse(id: string, settings: UniverseSettings, now: number, persona: Persona | null = null): UniverseState {
   const league = generateLeague({ seed: settings.seed, name: settings.name, teamCount: settings.leagueSize });
@@ -143,6 +164,9 @@ export function createUniverse(id: string, settings: UniverseSettings, now: numb
     elections: [],
     news: [],
     weird: { playerStatus: {}, playerMods: {}, stadiums: createStadiums(settings.seed, league), departed: [] },
+    clock: settings.timeMode === 'living' ? { anchorMs: now, anchorDay: 1 } : null,
+    timeline: [],
+    lastBackupDay: 1,
   };
   return withNewElection(base, 1);
 }
@@ -193,6 +217,8 @@ const withLedger = (s: UniverseState, amount: number, reason: string, day = s.cu
 const NEWS_KEPT = 120;
 const withNews = (s: UniverseState, texts: string[], day = s.currentDay): NewsItem[] =>
   [...s.news, ...texts.map((text) => ({ season: s.season, day, text }))].slice(-NEWS_KEPT);
+
+const withTimeline = (s: UniverseState, kind: TimelineKind, text: string, day = s.currentDay): TimelineEntry[] => [...s.timeline, { season: s.season, day, kind, text }];
 
 /** The election currently accepting votes, if any. */
 export const currentElection = (s: UniverseState): Election | null => {
@@ -272,7 +298,9 @@ function resolveElection(s: UniverseState, e: Election, day: number): UniverseSt
   }
 
   const elections = s.elections.map((x) => (x.id === e.id ? { ...x, result: { winner, totals } } : x));
-  return { ...s, league, weird, playerLog, elections, news: withNews(s, headlines, day) };
+  let timeline = withTimeline(s, 'election', headlines[0], day);
+  if (proposal.effect.kind === 'resurrect') timeline = [...timeline, { season: s.season, day, kind: 'return', text: headlines[1] }];
+  return { ...s, league, weird, playerLog, elections, timeline, news: withNews(s, headlines, day) };
 }
 
 /** Story-worthy notes for a player's life timeline, from one game's box score. */
@@ -338,8 +366,26 @@ export function reduce(state: UniverseState, event: WorldEvent): UniverseState {
       } else if (!open) {
         next = withNewElection(next, event.day + 1); // e.g. saves from before elections existed
       }
+      if (isSeasonOver(next) && !isSeasonOver(state)) {
+        const top = computeStandings(next.league.teams, Object.values(next.results))[0];
+        const t = next.league.teams.find((x) => x.id === top.teamId)!;
+        next = { ...next, timeline: withTimeline(next, 'champion', `The ${t.city} ${t.name} win Season ${next.season} at ${top.wins}–${top.losses}.`, event.day) };
+      }
       return next;
     }
+
+    case 'timeSettingsChanged': {
+      const settings = { ...state.settings, timeMode: event.timeMode, dayLengthMinutes: event.dayLengthMinutes };
+      // Switching modes or day length restarts the clock from now.
+      const clock = event.timeMode === 'living' ? { anchorMs: event.nowMs, anchorDay: state.currentDay } : null;
+      return { ...state, settings, clock };
+    }
+
+    case 'clockSet':
+      return state.settings.timeMode === 'living' ? { ...state, clock: event.clock } : state;
+
+    case 'backupNoted':
+      return { ...state, lastBackupDay: Math.max(state.lastBackupDay, event.day) };
 
     case 'weird': {
       const h = event.happening;
@@ -354,7 +400,8 @@ export function reduce(state: UniverseState, event: WorldEvent): UniverseState {
           note(c.replacement.id, `Called up to replace ${state.league.players[c.playerId].name}.`);
         }
       }
-      return { ...state, league, weird, playerLog, news: withNews(state, [h.text]) };
+      const kind: TimelineKind = h.eventId === 'death' ? 'death' : 'weird';
+      return { ...state, league, weird, playerLog, news: withNews(state, [h.text]), timeline: withTimeline(state, kind, h.text) };
     }
 
     case 'votesBought': {

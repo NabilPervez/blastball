@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { exportUniverse, importLeague, leagueFileName } from '../../storage/exportImport';
 import { formatBytes, promptInstall, shareOrDownload, storageInfo, useInstallMode, type StorageInfo } from '../pwa';
 import { useGame } from '../store';
+import { DAY_LENGTHS, type DayLengthMinutes } from '../../world/clock';
 
 export function InstallHelp() {
   const mode = useInstallMode();
@@ -18,7 +19,9 @@ export function InstallHelp() {
 
 export function Settings() {
   const u = useGame((s) => s.u)!;
-  const { showPicker, openUniverse } = useGame();
+  const { showPicker, openUniverse, dispatch } = useGame();
+  const setTime = (timeMode: 'manual' | 'living', dayLengthMinutes: DayLengthMinutes) =>
+    dispatch({ type: 'timeSettingsChanged', timeMode, dayLengthMinutes, nowMs: Date.now() });
   const [info, setInfo] = useState<StorageInfo | null>(null);
   const [withPbp, setWithPbp] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
@@ -34,6 +37,7 @@ export function Settings() {
     try {
       const blob = await exportUniverse(u.id, { includePlayByPlay: withPbp });
       const how = await shareOrDownload(blob, leagueFileName(u.settings.name));
+      await dispatch({ type: 'backupNoted', day: u.currentDay });
       setStatus(`${how === 'shared' ? 'Shared' : 'Downloaded'} ${leagueFileName(u.settings.name)} (${formatBytes(blob.size)}).`);
     } catch (e) {
       setStatus(`Export failed: ${(e as Error).message}`);
@@ -71,9 +75,33 @@ export function Settings() {
         </dd>
         <dt>Chaos</dt>
         <dd className="cap">{u.settings.chaos}</dd>
-        <dt>Time</dt>
-        <dd>Manual (Living mode arrives later)</dd>
       </dl>
+
+      <h2>Time</h2>
+      <div className="card pad stack">
+        <div className="choice-row" role="group" aria-label="Time mode">
+          <button className="chip" aria-pressed={u.settings.timeMode === 'living'} onClick={() => setTime('living', u.settings.dayLengthMinutes)}>
+            Living
+          </button>
+          <button className="chip" aria-pressed={u.settings.timeMode === 'manual'} onClick={() => setTime('manual', u.settings.dayLengthMinutes)}>
+            Manual
+          </button>
+        </div>
+        <p className="muted small">
+          {u.settings.timeMode === 'living'
+            ? 'The league plays on its own, even while the app is closed. When you come back it catches up (up to 7 days).'
+            : 'Time only moves when you press a time control.'}
+        </p>
+        {u.settings.timeMode === 'living' && (
+          <div className="choice-row" role="group" aria-label="Length of one in-game day">
+            {DAY_LENGTHS.map((d) => (
+              <button key={d.minutes} className="chip" aria-pressed={u.settings.dayLengthMinutes === d.minutes} onClick={() => setTime('living', d.minutes)}>
+                {d.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
       <button className="btn" onClick={showPicker}>
         Switch / manage universes
       </button>

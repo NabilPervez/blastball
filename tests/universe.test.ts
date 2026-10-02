@@ -7,7 +7,7 @@ import { snapshotsToPrune, gamesToPrune } from '../src/storage/retention';
 import { createUniverse, reduceAll, runCommand, type UniverseSettings } from '../src/world/universe';
 
 const settings = (p: Partial<UniverseSettings> = {}): UniverseSettings => ({
-  name: 'Test League', seed: 'test-seed', leagueSize: 8, seasonLength: 20, chaos: 'normal', timeMode: 'manual', ...p,
+  name: 'Test League', seed: 'test-seed', leagueSize: 8, seasonLength: 20, chaos: 'normal', timeMode: 'manual', dayLengthMinutes: 60, ...p,
 });
 
 describe('universe', () => {

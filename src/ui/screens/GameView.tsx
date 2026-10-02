@@ -3,6 +3,7 @@ import type { GameEvent } from '../../engine/types';
 import { describeEvent, isBigMoment } from '../../narrative/playByPlay';
 import { BaseDiamond, Outs, TeamBadge } from '../components/bits';
 import { useGame } from '../store';
+import { isPinned, setPinned } from '../../storage/db';
 
 const SPEEDS = [
   { label: 'Live', ms: 1500 },
@@ -19,6 +20,16 @@ export function GameView({ gameId }: { gameId: string }) {
 
   const [events, setEvents] = useState<GameEvent[] | null>(null);
   const [archived, setArchived] = useState(false);
+  // null = this game has no saved play-by-play (yet), so it can't be pinned.
+  const [pinned, setPinnedState] = useState<boolean | null>(null);
+  const recordedNow = !!u.results[gameId];
+  useEffect(() => {
+    if (recordedNow) isPinned(u.id, u.season, gameId).then(setPinnedState);
+  }, [recordedNow, u.id, u.season, gameId]);
+  const togglePin = async () => {
+    if (pinned === null) return;
+    if (await setPinned(u.id, u.season, gameId, !pinned)) setPinnedState(!pinned);
+  };
   const [shown, setShown] = useState(0);
   const [speed, setSpeed] = useState<number>(SPEEDS[0].ms);
   const [paused, setPaused] = useState(false);
@@ -87,9 +98,16 @@ export function GameView({ gameId }: { gameId: string }) {
 
   return (
     <section className="game-view" aria-label={`${away.name} at ${home.name}`}>
-      <button className="link-btn" onClick={() => watch(null)}>
-        ← All games
-      </button>
+      <div className="row">
+        <button className="link-btn" onClick={() => watch(null)}>
+          ← All games
+        </button>
+        {done && pinned !== null && (
+          <button className="chip pin-btn" aria-pressed={pinned} onClick={togglePin}>
+            {pinned ? '★ Pinned' : '☆ Pin this game'}
+          </button>
+        )}
+      </div>
 
       <div className="scoreboard card">
         <div className="sb-team">

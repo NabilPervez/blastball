@@ -32,6 +32,26 @@ export const migrations: Record<number, Migration> = {
     const league = save.league as Parameters<typeof createStadiums>[1];
     return { ...save, weird: { playerStatus: {}, playerMods: {}, stadiums: createStadiums(settings.seed, league), departed: [] } };
   },
+  // v4 → v5 (Sprint 7): Living time, permanent timeline, backup reminders.
+  // The timeline is backfilled from past elections and the Departed.
+  4: (save) => {
+    type E = { season: number; closesDay: number; id: number; proposals: { title: string }[]; result: { winner: number; totals: number[] } | null };
+    type D = { playerId: string; season: number; day: number; cause: string };
+    const players = (save.league as { players: Record<string, { name: string }> }).players;
+    const timeline = [
+      ...(save.elections as E[])
+        .filter((e) => e.result)
+        .map((e) => ({ season: e.season, day: e.closesDay, kind: 'election', text: `Election #${e.id}: “${e.proposals[e.result!.winner].title}” wins with ${e.result!.totals[e.result!.winner]} votes.` })),
+      ...(save.weird as { departed: D[] }).departed.map((d) => ({ season: d.season, day: d.day, kind: 'death', text: `${players[d.playerId]?.name ?? 'A player'} ${d.cause}` })),
+    ].sort((a, b) => a.season - b.season || a.day - b.day);
+    return {
+      ...save,
+      settings: { ...(save.settings as object), dayLengthMinutes: 60 },
+      clock: null,
+      timeline,
+      lastBackupDay: save.currentDay,
+    };
+  },
 };
 
 export function migrateSave(raw: unknown): UniverseState {

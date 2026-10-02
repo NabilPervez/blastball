@@ -18,7 +18,7 @@ import {
   type UniverseState,
 } from '../src/world/universe';
 
-const settings: UniverseSettings = { name: 'Econ', seed: 'econ-seed', leagueSize: 8, seasonLength: 20, chaos: 'normal', timeMode: 'manual' };
+const settings: UniverseSettings = { name: 'Econ', seed: 'econ-seed', leagueSize: 8, seasonLength: 20, chaos: 'normal', timeMode: 'manual', dayLengthMinutes: 60 };
 const persona = (kind: Persona['kind'], favoriteTeamId: string | null = null): Persona => ({ kind, fanName: 'Pat', favoriteTeamId });
 const fresh = (p: Persona | null = null) => createUniverse('e', settings, 0, p);
 

@@ -3,6 +3,7 @@ import { computeStandings } from '../../engine/season';
 import { gamesOn, isSeasonOver, prophecy, seasonDays } from '../../world/universe';
 import { ElectionCard } from '../components/ElectionCard';
 import { InstallBanner } from '../components/InstallBanner';
+import { BackupReminder, LivingClock, WhileYouWereGone } from '../components/TimeBits';
 import { NewsFeed } from './Vote';
 import { ChoosePersona, FanCard, Ledger, OpenBets } from '../components/Wallet';
 import { useGame } from '../store';
@@ -41,9 +42,12 @@ export function Today() {
             {copied ? 'Link copied!' : 'Share seed'}
           </button>
         </p>
+        <LivingClock />
       </header>
 
+      <WhileYouWereGone />
       <InstallBanner ready={u.currentDay > 1} />
+      <BackupReminder />
       <ChoosePersona />
       <FanCard />
       <ElectionCard />

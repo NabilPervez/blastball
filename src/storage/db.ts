@@ -156,3 +156,19 @@ export async function getSetting<T>(key: string, d = db): Promise<T | undefined>
 export async function setSetting(key: string, value: unknown, d = db): Promise<void> {
   await d.settings.put({ key, value });
 }
+
+/** Pin a game so its play-by-play survives compaction. */
+export async function setPinned(universeId: string, season: number, gameId: string, pinned: boolean, d = db): Promise<boolean> {
+  const updated = await d.games.update([universeId, season, gameId], { pinned });
+  return updated > 0;
+}
+
+export async function listPinned(universeId: string, d = db): Promise<Omit<GameRow, 'events'>[]> {
+  const rows = await d.games.where('universeId').equals(universeId).filter((g) => g.pinned).toArray();
+  return rows.map((r) => ({ universeId: r.universeId, season: r.season, gameId: r.gameId, day: r.day, pinned: r.pinned }));
+}
+
+export async function isPinned(universeId: string, season: number, gameId: string, d = db): Promise<boolean | null> {
+  const row = await d.games.get([universeId, season, gameId]);
+  return row ? row.pinned : null;
+}

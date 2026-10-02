@@ -3,9 +3,11 @@ import { CoinBadge } from './components/Wallet';
 import { useGame, type Tab } from './store';
 import { Games } from './screens/Games';
 import { League } from './screens/League';
-import { ComingSoon, Today } from './screens/Today';
+import { Today } from './screens/Today';
 import { Settings } from './screens/Settings';
 import { Vote } from './screens/Vote';
+import { History } from './screens/History';
+import { CatchUpOverlay } from './components/TimeBits';
 import { CreateUniverse, Picker } from './screens/Universes';
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
@@ -52,11 +54,23 @@ function TopBar() {
 }
 
 export function App() {
-  const { view, tab, setTab, init } = useGame();
+  const { view, tab, setTab, init, catchUp } = useGame();
 
   useEffect(() => {
     init();
   }, [init]);
+
+  // Living mode: keep the world turning while the app is open, and catch up when it comes back into view.
+  useEffect(() => {
+    const tick = () => void catchUp();
+    const t = setInterval(tick, 30_000);
+    const onVisible = () => document.visibilityState === 'visible' && tick();
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearInterval(t);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [catchUp]);
 
   if (view === 'loading') return <p className="solo muted">Loading…</p>;
   if (view === 'picker')
@@ -71,6 +85,7 @@ export function App() {
   return (
     <div className="app">
       <ErrorBanner />
+      <CatchUpOverlay />
       <nav className="nav" aria-label="Main">
         <div className="brand display">
           BLAST<span>BALL</span>
@@ -91,7 +106,7 @@ export function App() {
         {tab === 'league' && <League />}
         {tab === 'vote' && <Vote />}
         {tab === 'settings' && <Settings />}
-        {tab === 'history' && <ComingSoon title="History" blurb="Season timeline, notable events, pinned games and the Hall of the Departed. Arrives in a later sprint." />}
+        {tab === 'history' && <History />}
       </main>
     </div>
   );

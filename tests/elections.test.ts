@@ -11,7 +11,7 @@ import {
   type UniverseState,
 } from '../src/world/universe';
 
-const settings = (seed: string): UniverseSettings => ({ name: 'Vote', seed, leagueSize: 8, seasonLength: 20, chaos: 'normal', timeMode: 'manual' });
+const settings = (seed: string): UniverseSettings => ({ name: 'Vote', seed, leagueSize: 8, seasonLength: 20, chaos: 'normal', timeMode: 'manual', dayLengthMinutes: 60 });
 const fresh = (seed = 'vote-seed') => createUniverse('v', settings(seed), 0);
 
 describe('vote pricing', () => {
