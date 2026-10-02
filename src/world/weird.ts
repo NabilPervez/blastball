@@ -26,6 +26,18 @@ export interface ModDef {
   returnedOnly?: boolean;
   /** Bends the career arc: `shift` is added to each offseason's development, `delay` postpones decline and retirement (years). */
   aging?: { shift?: number; delay?: number };
+  /** Per-mille chance each day of spreading to a teammate (scaled by chaos). */
+  contagion?: number;
+  /** Can be rolled as a born-with trait when a player enters the league. */
+  innate?: boolean;
+  /** Only ever made by fusing two other traits (see ComboDef). */
+  comboOnly?: boolean;
+}
+
+/** Two traits on one player fuse into a stronger one. */
+export interface ComboDef {
+  needs: [string, string];
+  result: string;
 }
 
 export interface StadiumModDef extends ModDef {
@@ -57,6 +69,7 @@ export interface RulePack {
   playerMods: ModDef[];
   stadiumMods: StadiumModDef[];
   events: EventDef[];
+  combos?: ComboDef[];
 }
 
 // ---------------------------------------------------------------------------
@@ -103,6 +116,9 @@ export function validatePack(raw: unknown): RulePack {
     else if (ef.type === 'ratingDelta' || ef.type === 'teamRatingDelta') ef.keys.forEach((k) => RATING_KEYS.includes(k) || fail(`event ${e.id}: unknown rating ${k}`));
     else fail(`event ${e.id}: unknown effect type`);
   }
+  for (const c of p.combos ?? []) {
+    if (!Array.isArray(c.needs) || c.needs.length !== 2 || !c.needs.every((m) => modIds.has(m)) || !modIds.has(c.result)) fail(`combo ${c.result} is malformed`);
+  }
   return p;
 }
 
@@ -119,6 +135,7 @@ export function mergePacks(packs: RulePack[]): RulePack {
       playerMods: [...acc.playerMods, ...p.playerMods],
       stadiumMods: [...acc.stadiumMods, ...p.stadiumMods],
       events: [...acc.events, ...p.events],
+      combos: [...(acc.combos ?? []), ...(p.combos ?? [])],
     }),
     first,
   );
@@ -227,6 +244,7 @@ export function effectiveLeague(league: League, w: WeirdState, game: ScheduledGa
 
 export type WeirdChange =
   | { kind: 'addPlayerMod'; playerId: string; mod: ActiveMod }
+  | { kind: 'removePlayerMods'; playerId: string; ids: string[] }
   | { kind: 'addStadiumMod'; teamId: string; mod: ActiveMod }
   | { kind: 'ratings'; playerIds: string[]; delta: Delta }
   | { kind: 'death'; playerId: string; teamId: string; cause: string; replacement: Player };
@@ -254,6 +272,53 @@ const teamName = (league: League, id: string) => {
   return `${t.city} ${t.name}`;
 };
 
+const later = (a: ActiveMod['until'], b: ActiveMod['until']) =>
+  a === null || b === null ? null : a.season > b.season || (a.season === b.season && a.day >= b.day) ? a : b;
+
+/**
+ * Give `mod` to a player who already holds `held`. If it completes a combo, the two ingredients
+ * fuse: they're removed and the combo trait is added (permanent if either ingredient was).
+ */
+export function grantMod(pack: RulePack, playerId: string, held: ActiveMod[], mod: ActiveMod): { changes: WeirdChange[]; combo: ModDef | null } {
+  const ids = new Set(held.map((m) => m.id));
+  for (const c of pack.combos ?? []) {
+    if (!c.needs.includes(mod.id) || ids.has(c.result)) continue;
+    const other = c.needs[0] === mod.id ? c.needs[1] : c.needs[0];
+    const partner = held.find((m) => m.id === other);
+    if (!partner) continue;
+    return {
+      changes: [
+        { kind: 'removePlayerMods', playerId, ids: [other, mod.id] },
+        { kind: 'addPlayerMod', playerId, mod: { id: c.result, until: later(partner.until, mod.until) } },
+      ],
+      combo: findPlayerMod(pack, c.result) ?? null,
+    };
+  }
+  return { changes: [{ kind: 'addPlayerMod', playerId, mod }], combo: null };
+}
+
+const BIRTH_WEIGHTS = [44, 30, 15, 8, 2, 1];
+
+/** Traits a player is born with: most have none or one, a lucky few arrive already strange. Combos fuse. */
+export function birthTraits(seed: string, playerId: string, pack: RulePack = mergePacks(DEFAULT_PACKS)): ActiveMod[] {
+  const rng = createRng(seed, 'born', playerId);
+  let roll = rng.int(BIRTH_WEIGHTS.reduce((a, b) => a + b, 0));
+  let count = BIRTH_WEIGHTS.findIndex((w) => (roll -= w) < 0);
+  const pool = pack.playerMods.filter((m) => m.innate);
+  let held: ActiveMod[] = [];
+  while (count-- > 0 && pool.length) {
+    const def = pool.splice(rng.int(pool.length), 1)[0];
+    for (const c of grantMod(pack, playerId, held, { id: def.id, until: null }).changes) {
+      if (c.kind === 'removePlayerMods') held = held.filter((m) => !c.ids.includes(m.id));
+      if (c.kind === 'addPlayerMod') held = [...held, c.mod];
+    }
+  }
+  return held;
+}
+
+const CONTAGION_SCALE: Record<Chaos, number> = { calm: 0.5, normal: 1, weird: 1.5, unhinged: 2 };
+const MAX_SPREADS_PER_DAY = 2;
+
 /** What strange things happen at the end of `day`. Pure: same input ⇒ same happenings. */
 export function rollDay(input: RollInput, pack: RulePack = mergePacks(DEFAULT_PACKS)): WeirdHappening[] {
   const { league, weird, seed, season, day, seasonDays, chaos } = input;
@@ -279,7 +344,9 @@ export function rollDay(input: RollInput, pack: RulePack = mergePacks(DEFAULT_PA
       if (ef.type === 'addPlayerMod') {
         const mod = findPlayerMod(pack, rng.pick(ef.mods))!;
         vars.mod = mod.name;
-        changes = [{ kind: 'addPlayerMod', playerId, mod: { id: mod.id, until: until(ef.durationDays) } }];
+        const granted = grantMod(pack, playerId, (weird.playerMods[playerId] ?? []).filter((m) => isActiveMod(m, season, day)), { id: mod.id, until: until(ef.durationDays) });
+        changes = granted.changes;
+        if (granted.combo) vars.combo = granted.combo.name;
       } else if (ef.type === 'addStadiumMod') {
         const mod = findStadiumMod(pack, rng.pick(ef.mods))!;
         vars.mod = mod.name;
@@ -289,11 +356,40 @@ export function rollDay(input: RollInput, pack: RulePack = mergePacks(DEFAULT_PA
         const delta = Object.fromEntries(ef.keys.map((k) => [k, amount]));
         changes = [{ kind: 'ratings', playerIds: ef.type === 'ratingDelta' ? [playerId] : roster, delta }];
       }
-      out.push({ eventId: event.id, teamId: team.id, text: fill(event.text, vars), changes });
+      const combo = vars.combo ? ` The traits fused: ${player.name} is now ${vars.combo}!` : '';
+      out.push({ eventId: event.id, teamId: team.id, text: fill(event.text, vars) + combo, changes });
     }
   }
 
-  // 2. Death: rare, permanent, rate set per season so long and short seasons feel the same.
+  // 2. Contagion: some traits spread to teammates.
+  const crng = createRng(seed, season, day, 'contagion');
+  let spreads = 0;
+  for (const team of league.teams) {
+    const roster = [...team.lineup, ...team.rotation];
+    for (const carrier of roster) {
+      for (const m of weird.playerMods[carrier] ?? []) {
+        const def = findPlayerMod(pack, m.id);
+        if (!def?.contagion || !isActiveMod(m, season, day) || spreads >= MAX_SPREADS_PER_DAY) continue;
+        if (!crng.chance(Math.round(def.contagion * CONTAGION_SCALE[chaos]))) continue;
+        const healthy = roster.filter((id) => id !== carrier && !(weird.playerMods[id] ?? []).some((x) => x.id === m.id && isActiveMod(x, season, day)));
+        if (!healthy.length) continue;
+        const victim = crng.pick(healthy);
+        const held = (weird.playerMods[victim] ?? []).filter((x) => isActiveMod(x, season, day));
+        const granted = grantMod(pack, victim, held, { id: m.id, until: { season, day: day + crng.range(3, 8) } });
+        const vName = league.players[victim].name;
+        const combo = granted.combo ? ` It fused with what they already had: ${vName} is now ${granted.combo.name}!` : '';
+        out.push({
+          eventId: 'contagion',
+          teamId: team.id,
+          text: `${def.name} is spreading through the ${teamName(league, team.id)}: ${league.players[carrier].name} gave it to ${vName}.${combo}`,
+          changes: granted.changes,
+        });
+        spreads++;
+      }
+    }
+  }
+
+  // 3. Death: rare, permanent, rate set per season so long and short seasons feel the same.
   const drng = createRng(seed, season, day, 'death');
   const perMille = Math.round((pack.deathsPerSeason[chaos] * 1000) / seasonDays);
   if (drng.chance(perMille)) {
@@ -324,6 +420,9 @@ export function applyHappening(league: League, weird: WeirdState, h: WeirdHappen
     switch (c.kind) {
       case 'addPlayerMod':
         w = { ...w, playerMods: { ...w.playerMods, [c.playerId]: [...(w.playerMods[c.playerId] ?? []).filter((m) => m.id !== c.mod.id), c.mod] } };
+        break;
+      case 'removePlayerMods':
+        w = { ...w, playerMods: { ...w.playerMods, [c.playerId]: (w.playerMods[c.playerId] ?? []).filter((m) => !c.ids.includes(m.id)) } };
         break;
       case 'addStadiumMod': {
         const st = w.stadiums[c.teamId];

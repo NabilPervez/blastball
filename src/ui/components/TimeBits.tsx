@@ -4,6 +4,7 @@ import { DAY_LENGTHS, formatDuration, msUntilNextDay } from '../../world/clock';
 import { isSeasonOver } from '../../world/universe';
 import { shareOrDownload } from '../pwa';
 import { useGame } from '../store';
+import { LinkedText } from './LinkedText';
 
 /** Ticks every `ms` so time-based UI stays fresh. */
 export function useNow(ms = 30_000) {
@@ -66,7 +67,7 @@ export function WhileYouWereGone() {
           {digest.items.map((item, i) => (
             <li key={i} className={`digest-item k-${item.kind}`}>
               <span className="digest-kind">{KIND_LABEL[item.kind]}</span>
-              <span>{item.text}</span>
+              <span><LinkedText text={item.text} /></span>
             </li>
           ))}
         </ol>

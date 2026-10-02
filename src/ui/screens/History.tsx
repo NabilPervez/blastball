@@ -3,6 +3,7 @@ import { listPinned } from '../../storage/db';
 import type { TimelineKind, UniverseState } from '../../world/universe';
 import { cardPropsFor, PlayerCard } from '../components/PlayerCard';
 import { useGame } from '../store';
+import { LinkedText } from '../components/LinkedText';
 
 const FILTERS: { id: TimelineKind | 'all'; label: string }[] = [
   { id: 'all', label: 'Everything' },
@@ -12,9 +13,10 @@ const FILTERS: { id: TimelineKind | 'all'; label: string }[] = [
   { id: 'weird', label: 'Strange' },
   { id: 'champion', label: 'Champions' },
   { id: 'retirement', label: 'Retirements' },
+  { id: 'rivalry', label: 'Rivalries' },
 ];
 
-const KIND_MARK: Record<TimelineKind, string> = { election: '✦', death: '✕', return: '◎', weird: '◐', champion: '★', retirement: '◇' };
+const KIND_MARK: Record<TimelineKind, string> = { election: '✦', death: '✕', return: '◎', weird: '◐', champion: '★', retirement: '◇', rivalry: '⚔' };
 
 function Timeline({ u }: { u: UniverseState }) {
   const [filter, setFilter] = useState<TimelineKind | 'all'>('all');
@@ -41,7 +43,7 @@ function Timeline({ u }: { u: UniverseState }) {
                 <span className="muted small">
                   Season {t.season} · Day {t.day}
                 </span>
-                <span className="ht-text">{t.text}</span>
+                <span className="ht-text"><LinkedText text={t.text} /></span>
               </span>
             </li>
           ))}
@@ -143,7 +145,7 @@ export function History() {
             {champions.map((c, i) => (
               <li key={i}>
                 <span className="muted small">Season {c.season}</span>
-                <strong>{c.text}</strong>
+                <strong><LinkedText text={c.text} /></strong>
               </li>
             ))}
           </ul>

@@ -10,6 +10,9 @@ import { ModList, playerModsOf, stadiumModsOf } from '../components/Mods';
 import { PatronPanel } from '../components/SeasonBits';
 import { Leaders, PickButtons } from '../components/FanFeatures';
 import { useGame } from '../store';
+import { allTimeRecord, isRivalry, RIVAL_MIN_GAMES, rivalsOf, teamBio, teamPerk, winsVs } from '../../world/teams';
+import { tierOf } from '../../world/rarity';
+import { LinkedText } from '../components/LinkedText';
 
 const teamOf = (u: UniverseState, id: string) => u.league.teams.find((t) => t.id === id)!;
 
@@ -186,9 +189,74 @@ function Search({ u }: { u: UniverseState }) {
   );
 }
 
+/** Season, all-time and head-to-head records, with rivalries marked. */
+function TeamRecord({ u, teamId }: { u: UniverseState; teamId: string }) {
+  const showDetail = useGame((s) => s.showDetail);
+  const h2h = u.h2h ?? {};
+  const all = allTimeRecord(h2h, u.league.teams, teamId);
+  const titles = u.archive.filter((a) => a.championId === teamId).length;
+  const roster = [...teamOf(u, teamId).lineup, ...teamOf(u, teamId).rotation];
+  const rare = roster.filter((id) => ['rare', 'epic', 'legendary'].includes(tierOf(u, id))).length;
+  const opponents = u.league.teams
+    .filter((t) => t.id !== teamId)
+    .map((t) => ({ t, w: winsVs(h2h, teamId, t.id), l: winsVs(h2h, t.id, teamId) }))
+    .sort((a, b) => b.w + b.l - (a.w + a.l));
+  return (
+    <>
+      <h2>Record</h2>
+      <dl className="card kv team-record">
+        <dt>All-time</dt>
+        <dd>
+          {all.wins}–{all.losses}
+          {all.wins + all.losses > 0 && <span className="muted small"> ({(all.wins / (all.wins + all.losses)).toFixed(3).replace(/^0/, '')})</span>}
+        </dd>
+        <dt>Championships</dt>
+        <dd>{titles ? '★'.repeat(titles) : 'None yet'}</dd>
+        <dt>Rare cards</dt>
+        <dd>
+          {rare} of {roster.length} players
+        </dd>
+      </dl>
+      <h3>Head to head</h3>
+      <div className="card table-wrap">
+        <table className="stat-table h2h-table">
+          <thead>
+            <tr>
+              <th scope="col">Opponent</th>
+              <th scope="col">W</th>
+              <th scope="col">L</th>
+              <th scope="col">
+                <span className="sr-only">Rivalry</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {opponents.map(({ t, w, l }) => (
+              <tr key={t.id} className={isRivalry(h2h, teamId, t.id) ? 'rival-row' : ''}>
+                <th scope="row">
+                  <button className="inline-link" onClick={() => showDetail({ kind: 'team', id: t.id })}>
+                    {t.city} {t.name}
+                  </button>
+                </th>
+                <td>{w}</td>
+                <td>{l}</td>
+                <td>{isRivalry(h2h, teamId, t.id) ? <span className="rival-tag">⚔ Rival</span> : w + l < RIVAL_MIN_GAMES ? <span className="muted small">{RIVAL_MIN_GAMES - w - l} to go</span> : ''}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="muted small">Teams that meet {RIVAL_MIN_GAMES}+ times with a close record (each side winning at least 40%) become rivals.</p>
+    </>
+  );
+}
+
 function TeamPage({ u, teamId }: { u: UniverseState; teamId: string }) {
   const showDetail = useGame((s) => s.showDetail);
   const team = teamOf(u, teamId);
+  const bio = teamBio(u.settings.seed, team);
+  const perk = teamPerk(u.settings.seed, u.league, teamId);
+  const rivals = rivalsOf(u.h2h ?? {}, u.league.teams, teamId);
   const row = standingsOf(u).find((r) => r.teamId === teamId)!;
   const reserves = Object.entries(u.weird.playerStatus)
     .filter(([id, st]) => st === 'reserve' && u.league.players[id].teamId === teamId)
@@ -213,8 +281,35 @@ function TeamPage({ u, teamId }: { u: UniverseState; teamId: string }) {
           <p className="muted">
             {row.wins}–{row.losses} · {row.runsFor} runs scored, {row.runsAgainst} allowed
           </p>
+          <p className="team-motto">“{bio.motto}” · est. {bio.founded}</p>
         </div>
       </header>
+      <p className="team-bio">{bio.text}</p>
+      <div className="card pad team-perk">
+        <span className="team-perk-icon" aria-hidden="true">
+          {perk.icon}
+        </span>
+        <span>
+          <span className="eyebrow">Team perk</span>
+          <br />
+          <strong>{perk.name}</strong> <span className="muted small">— {perk.description} Only the {team.name} get this.</span>
+        </span>
+      </div>
+      {rivals.length > 0 && (
+        <p className="team-rivals">
+          ⚔ Rivals:{' '}
+          {rivals.map((id, i) => (
+            <span key={id}>
+              {i > 0 && ', '}
+              <button className="inline-link" onClick={() => showDetail({ kind: 'team', id })}>
+                {teamOf(u, id).city} {teamOf(u, id).name}
+              </button>
+            </span>
+          ))}
+          <span className="muted small"> · both sides get +3 contact, power, velocity and stuff when they meet</span>
+        </p>
+      )}
+      <TeamRecord u={u} teamId={teamId} />
       <PatronPanel teamId={teamId} />
       <h2>Lineup</h2>
       {grid(team.lineup)}
@@ -309,7 +404,7 @@ function Timeline({ u, playerId }: { u: UniverseState; playerId: string }) {
           <span className="muted small">
             Season {e.season} · Day {e.day}
           </span>{' '}
-          {e.text}
+          <LinkedText text={e.text} />
         </li>
       ))}
     </ol>

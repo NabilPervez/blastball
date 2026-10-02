@@ -47,7 +47,8 @@ describe('careers', () => {
   });
 
   it('more traits make a rarer card', () => {
-    const u = createUniverse('c', settings(), 0);
+    const born = createUniverse('c', settings(), 0);
+    const u = { ...born, weird: { ...born.weird, playerMods: {} } };
     expect(tierOf(u, 't1p1')).toBe('common');
     const weird = { ...u.weird, playerMods: { t1p1: ['glasses', 'extra-arm', 'ageless', 'old-soul', 'echo'].map((id) => ({ id, until: null })) } };
     const v = { ...u, weird };

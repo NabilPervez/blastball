@@ -6,6 +6,7 @@ import { TeamBadge } from '../components/bits';
 import { NAMED_AFTER_VOTES, opinionLabel } from '../../world/factionNews';
 import { lifetimeVotes } from '../../world/universe';
 import { useGame } from '../store';
+import { LinkedText } from '../components/LinkedText';
 
 function ProposalCard({ u, e, index }: { u: UniverseState; e: Election; index: number }) {
   const dispatch = useGame((s) => s.dispatch);
@@ -111,7 +112,7 @@ export function NewsFeed({ limit = 8 }: { limit?: number }) {
               Season {n.season} · Day {n.day}
               {faction && <span className="faction-tag">{faction.name}</span>}
             </span>
-            <span>{n.text}</span>
+            <span><LinkedText text={n.text} /></span>
           </li>
         );
       })}

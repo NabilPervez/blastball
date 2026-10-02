@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { formatMult } from '../../engine/odds';
 import type { ScheduledGame } from '../../engine/types';
-import { betError, currentOdds, offeredMultiplier } from '../../world/universe';
+import { betError, currentOdds, massBetTargets, offeredMultiplier } from '../../world/universe';
 import { useGame } from '../store';
 import { TeamBadge } from './bits';
 
@@ -81,5 +81,52 @@ export function BetPanel({ game, onDone }: { game: ScheduledGame; onDone(): void
         </button>
       </div>
     </form>
+  );
+}
+
+const MASS_AMOUNTS = [5, 10, 20, 50];
+
+/** One tap: the same bet on every favorite (or every underdog) in today's open games. */
+export function MassBet() {
+  const u = useGame((s) => s.u)!;
+  const dispatch = useGame((s) => s.dispatch);
+  const [amount, setAmount] = useState(20);
+  const [done, setDone] = useState<string | null>(null);
+  const favorites = massBetTargets(u, 'favorite');
+  const underdogs = massBetTargets(u, 'underdog');
+  if (!favorites.length && !underdogs.length) return null;
+
+  const place = async (side: 'favorite' | 'underdog', count: number) => {
+    const before = u.bets.length;
+    await dispatch({ type: 'massBet', side, amount });
+    const placed = (useGame.getState().u?.bets.length ?? before) - before;
+    setDone(placed ? `Placed ${placed} bet${placed === 1 ? '' : 's'} of ${amount} on the ${side === 'favorite' ? 'favorites' : 'underdogs'}.` : `No bets placed — ${amount * count > u.coins ? 'not enough coins' : 'nothing left to bet on'}.`);
+  };
+  const button = (side: 'favorite' | 'underdog', list: typeof favorites) => (
+    <button className="btn inline" disabled={!list.length || amount > u.coins} onClick={() => place(side, list.length)}>
+      {list.length ? `${amount} on all ${list.length} ${side === 'favorite' ? 'favorites' : 'underdogs'} · ${amount * list.length} coins` : `No ${side === 'favorite' ? 'favorites' : 'underdogs'} left to back`}
+    </button>
+  );
+
+  return (
+    <section className="card pad mass-bet" aria-labelledby="mass-bet-title">
+      <h2 id="mass-bet-title" className="mass-bet-title">Quick bets</h2>
+      <div className="chip-row" role="group" aria-label="Amount per game">
+        {MASS_AMOUNTS.map((a) => (
+          <button key={a} type="button" aria-pressed={amount === a} className="chip" onClick={() => setAmount(a)}>
+            {a}
+          </button>
+        ))}
+      </div>
+      <div className="mass-bet-actions">
+        {button('favorite', favorites)}
+        {button('underdog', underdogs)}
+      </div>
+      {done && (
+        <p className="muted small" role="status">
+          {done}
+        </p>
+      )}
+    </section>
   );
 }

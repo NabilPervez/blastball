@@ -162,7 +162,9 @@ describe('save fixtures', () => {
     const { migrateSave } = await import('../src/storage/migrate');
     const raw = (await import('./fixtures/save-v4.json')).default;
     const u = migrateSave(structuredClone(raw));
-    expect(u.weird).toEqual(raw.weird);
+    // Same weirdness, plus born-with traits added in v10.
+    expect({ ...u.weird, playerMods: undefined }).toEqual({ ...raw.weird, playerMods: undefined });
+    for (const [id, mods] of Object.entries(raw.weird.playerMods)) expect(u.weird.playerMods[id]).toEqual(expect.arrayContaining(mods as object[]));
     expect(u.settings.dayLengthMinutes).toBe(60);
     expect(u.clock).toBeNull();
     // Timeline backfilled from past elections and deaths.

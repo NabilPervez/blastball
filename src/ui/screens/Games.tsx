@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { ScheduledGame } from '../../engine/types';
 import { betsThisSeason, gamesOn, isSeasonOver, lastScheduledDay, seasonDays, unplayedToday } from '../../world/universe';
 import { formatMult } from '../../engine/odds';
-import { BetPanel } from '../components/BetPanel';
+import { BetPanel, MassBet } from '../components/BetPanel';
 import { TeamBadge } from '../components/bits';
 import { useGame } from '../store';
 import { GameView } from './GameView';
@@ -144,6 +144,7 @@ export function Games() {
           <GameCard key={g.id} game={g} />
         ))}
       </div>
+      {day === u.currentDay && <MassBet />}
       {day === u.currentDay && <TimeControls />}
     </section>
   );

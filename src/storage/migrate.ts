@@ -1,7 +1,7 @@
 import { createFactions } from '../world/factions';
 import { initialAge, initialExperience } from '../world/seasons';
 import { createStadiums } from '../world/weird';
-import { SAVE_VERSION, type UniverseState } from '../world/universe';
+import { bornWith, SAVE_VERSION, type UniverseState } from '../world/universe';
 
 /** Raised when a save was written by a newer version of the game than this one. */
 export class NewerSaveError extends Error {
@@ -88,6 +88,24 @@ export const migrations: Record<number, Migration> = {
       }),
     );
     return { ...save, experience, collection: [] };
+  },
+  // v9 -> v10: born-with traits (so every season opens with a spread of card rarities), and
+  // all-time head-to-head records, backfilled from this season's results.
+  9: (save) => {
+    const seed = (save.settings as { seed: string }).seed;
+    const weird = save.weird as { playerMods: Record<string, { id: string; until: unknown }[]> };
+    const players = Object.keys((save.league as { players: Record<string, unknown> }).players);
+    const untouched = players.filter((id) => !(weird.playerMods[id] ?? []).some((m) => m.until === null));
+    const born = bornWith(seed, untouched);
+    const playerMods = { ...weird.playerMods };
+    for (const [id, mods] of Object.entries(born)) playerMods[id] = [...(playerMods[id] ?? []), ...mods];
+    const h2h: Record<string, Record<string, number>> = {};
+    type R = { awayId: string; homeId: string; awayScore: number; homeScore: number };
+    for (const r of Object.values(save.results as Record<string, R>)) {
+      const [w, l] = r.homeScore > r.awayScore ? [r.homeId, r.awayId] : [r.awayId, r.homeId];
+      h2h[w] = { ...(h2h[w] ?? {}), [l]: (h2h[w]?.[l] ?? 0) + 1 };
+    }
+    return { ...save, weird: { ...weird, playerMods }, h2h };
   },
 };
 

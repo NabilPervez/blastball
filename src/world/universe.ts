@@ -12,7 +12,8 @@ import { personaMultiplier, winningPayout, type Persona } from './persona';
 import { emptyPicks, MAX_BACKED, MAX_FADED, pickOf, pickPayout, type PickKind, type Picks } from './picks';
 import { advancePlayoffs, ageRatingOffset, initialAge, initialExperience, isPlayoffGame, rookieAge, runOffseason, seasonAwards, startPlayoffs, type Phase, type Playoffs, type SeasonRecord } from './seasons';
 import { createRng } from '../engine/rng';
-import { agingTraits, applyHappening, createStadiums, DEFAULT_PACKS, effectiveLeague, expireMods, mergePacks, resurrect, rollDay, type WeirdHappening, type WeirdState } from './weird';
+import { isRivalry, recordWithWin, RIVALRY_BONUS, teamPerk, type HeadToHead } from './teams';
+import { agingTraits, applyHappening, birthTraits, createStadiums, DEFAULT_PACKS, effectiveLeague, expireMods, mergePacks, resurrect, rollDay, type WeirdHappening, type WeirdState } from './weird';
 
 /** The active rule packs (data-driven weirdness). */
 export const RULES = mergePacks(DEFAULT_PACKS);
@@ -22,7 +23,7 @@ export const RULES = mergePacks(DEFAULT_PACKS);
  * `reduce(state, event)`, so the same events always produce the same state.
  */
 
-export const SAVE_VERSION = 9;
+export const SAVE_VERSION = 10;
 
 /** Out of coins with nothing riding? The league office tops you back up (once a day). */
 export const BAILOUT_COINS = 100;
@@ -57,7 +58,7 @@ export interface UniverseSettings {
   dayLengthMinutes: DayLengthMinutes;
 }
 
-export type TimelineKind = 'election' | 'death' | 'return' | 'weird' | 'champion' | 'retirement';
+export type TimelineKind = 'election' | 'death' | 'return' | 'weird' | 'champion' | 'retirement' | 'rivalry';
 
 /** Notable world events, kept forever (unlike the capped news feed). */
 export interface TimelineEntry {
@@ -158,6 +159,8 @@ export interface UniverseState {
   experience: Record<string, number>;
   /** The fan's keepsake cards: favorite players, oldest first. No gameplay effect. */
   collection: CollectedCard[];
+  /** All-time head-to-head wins: h2h[a][b] = games a has won against b. */
+  h2h: HeadToHead;
 }
 
 export interface CollectedCard {
@@ -188,7 +191,18 @@ export type WorldEvent =
   | { type: 'patronSponsored'; teamId: string }
   | { type: 'favoriteTeamSet'; teamId: string }
   | { type: 'pickSet'; playerId: string; kind: PickKind | null }
-  | { type: 'collectionToggled'; playerId: string };
+  | { type: 'collectionToggled'; playerId: string }
+  | { type: 'massBet'; side: 'favorite' | 'underdog'; amount: number };
+
+/** Born-with traits for new players (only those who have any). */
+export function bornWith(seed: string, playerIds: string[]): Record<string, { id: string; until: null }[]> {
+  const out: Record<string, { id: string; until: null }[]> = {};
+  for (const id of playerIds) {
+    const mods = birthTraits(seed, id, RULES) as { id: string; until: null }[];
+    if (mods.length) out[id] = mods;
+  }
+  return out;
+}
 
 /** A new league is mid-history: ratings reflect where each player is in their career arc. */
 function shapeByAge(league: League, ages: Record<string, number>): League {
@@ -228,7 +242,7 @@ export function createUniverse(id: string, settings: UniverseSettings, now: numb
     factions: createFactions(settings.seed, league.teams.map((t) => t.id)),
     elections: [],
     news: [],
-    weird: { playerStatus: {}, playerMods: {}, stadiums: createStadiums(settings.seed, league), departed: [] },
+    weird: { playerStatus: {}, playerMods: bornWith(settings.seed, Object.keys(league.players)), stadiums: createStadiums(settings.seed, league), departed: [] },
     clock: settings.timeMode === 'living' ? { anchorMs: now, anchorDay: 1 } : null,
     timeline: [],
     lastBackupDay: 1,
@@ -237,6 +251,7 @@ export function createUniverse(id: string, settings: UniverseSettings, now: numb
     ages,
     experience: Object.fromEntries(Object.keys(league.players).map((id) => [id, initialExperience(id, ages[id])])),
     collection: [],
+    h2h: {},
     playoffs: null,
     patron: null,
     archive: [],
@@ -293,6 +308,25 @@ export function betError(s: UniverseState, gameId: string, teamId: string, amoun
   return null;
 }
 
+/**
+ * Today's open games and the side a one-tap mass bet would back: the favorite (lower payout)
+ * or the underdog. Games already bet on the other side, or with even odds, are skipped.
+ */
+export function massBetTargets(s: UniverseState, side: 'favorite' | 'underdog'): { gameId: string; teamId: string }[] {
+  const out: { gameId: string; teamId: string }[] = [];
+  for (const g of s.schedule) {
+    if (g.day !== s.currentDay || s.results[g.id] || s.started.includes(g.id)) continue;
+    const away = offeredMultiplier(s, g.id, g.awayId);
+    const home = offeredMultiplier(s, g.id, g.homeId);
+    if (away === home) continue;
+    const favorite = away < home ? g.awayId : g.homeId;
+    const teamId = side === 'favorite' ? favorite : favorite === g.awayId ? g.homeId : g.awayId;
+    if (betsThisSeason(s).some((b) => b.gameId === g.id && b.teamId !== teamId)) continue;
+    out.push({ gameId: g.id, teamId });
+  }
+  return out;
+}
+
 /** Why the player can't become this season's Patron, or null if they can. */
 export function patronError(s: UniverseState, teamId: string): string | null {
   if (s.season < PATRON_FROM_SEASON) return `Patrons unlock in Season ${PATRON_FROM_SEASON}.`;
@@ -317,7 +351,31 @@ function withPatron(s: UniverseState, league: League, game: ScheduledGame): Leag
   return { ...league, players };
 }
 
-export const gameLeague = (s: UniverseState, game: ScheduledGame) => withPatron(s, effectiveLeague(s.league, s.weird, game, s.season, RULES), game);
+/** Each team's unique perk, plus the rivalry bonus when rivals meet. */
+function withTeamIdentity(s: UniverseState, league: League, game: ScheduledGame): League {
+  const rivals = isRivalry(s.h2h ?? {}, game.awayId, game.homeId);
+  const players = { ...league.players };
+  for (const teamId of [game.awayId, game.homeId]) {
+    const perk = teamPerk(s.settings.seed, s.league, teamId);
+    const deltas = [...(!perk.homeOnly || teamId === game.homeId ? [perk.delta] : []), ...(rivals ? [RIVALRY_BONUS] : [])];
+    if (!deltas.length) continue;
+    const team = league.teams.find((t) => t.id === teamId)!;
+    for (const id of [...team.lineup, ...team.rotation]) {
+      const ratings = { ...players[id].ratings };
+      for (const d of deltas) {
+        for (const [k, v] of Object.entries(d)) {
+          const key = k as keyof typeof ratings;
+          ratings[key] = Math.max(0, Math.min(100, ratings[key] + (v ?? 0)));
+        }
+      }
+      players[id] = { ...players[id], ratings };
+    }
+  }
+  return { ...league, players };
+}
+
+export const gameLeague = (s: UniverseState, game: ScheduledGame) =>
+  withTeamIdentity(s, withPatron(s, effectiveLeague(s.league, s.weird, game, s.season, RULES), game), game);
 
 /** Why the favorite team can't be set, or null if it can. */
 export function favoriteTeamError(s: UniverseState, teamId: string): string | null {
@@ -357,8 +415,15 @@ function withBailout(s: UniverseState): UniverseState {
 
 /** After a game: favorite-team bonus, pick payouts, then the bailout check. */
 function afterGame(s: UniverseState, summary: GameSummary, box: BoxScore): UniverseState {
-  let next = s;
   const winnerId = summary.homeScore > summary.awayScore ? summary.homeId : summary.awayId;
+  const loserId = winnerId === summary.homeId ? summary.awayId : summary.homeId;
+  const h2h = recordWithWin(s.h2h ?? {}, winnerId, loserId);
+  let next: UniverseState = { ...s, h2h };
+  if (!isRivalry(s.h2h ?? {}, winnerId, loserId) && isRivalry(h2h, winnerId, loserId)) {
+    const met = h2h[winnerId][loserId] + (h2h[loserId]?.[winnerId] ?? 0);
+    const text = `A rivalry is born: the ${teamLabel(s, winnerId)} and the ${teamLabel(s, loserId)} have met ${met} times and neither will back down.`;
+    next = { ...next, news: withNews(next, [text], summary.day), timeline: withTimeline(next, 'rivalry', text, summary.day) };
+  }
   const fav = s.persona?.favoriteTeamId;
   if (fav && fav === winnerId) {
     next = { ...next, coins: next.coins + FAVORITE_WIN_BONUS, ledger: withLedger(next, FAVORITE_WIN_BONUS, `Your ${teamName(next, fav)} won`, summary.day) };
@@ -563,6 +628,14 @@ export function reduce(state: UniverseState, event: WorldEvent): UniverseState {
     case 'backupNoted':
       return { ...state, lastBackupDay: Math.max(state.lastBackupDay, event.day) };
 
+    case 'massBet': {
+      let next = state;
+      for (const g of massBetTargets(state, event.side)) {
+        if (!betError(next, g.gameId, g.teamId, event.amount)) next = reduce(next, { type: 'betPlaced', gameId: g.gameId, teamId: g.teamId, amount: event.amount });
+      }
+      return next;
+    }
+
     case 'collectionToggled': {
       if (!state.league.players[event.playerId]) return state;
       const has = state.collection.some((c) => c.playerId === event.playerId);
@@ -618,11 +691,13 @@ export function reduce(state: UniverseState, event: WorldEvent): UniverseState {
       const kind: TimelineKind = h.eventId === 'death' ? 'death' : 'weird';
       const ages = { ...state.ages };
       const experience = { ...state.experience };
+      let born = weird;
       for (const c of h.changes) if (c.kind === 'death') {
         ages[c.replacement.id] = rookieAge(c.replacement.id);
         experience[c.replacement.id] = 0;
+        born = { ...born, playerMods: { ...born.playerMods, ...bornWith(state.settings.seed, [c.replacement.id]) } };
       }
-      let next: UniverseState = { ...state, league, weird, ages, experience, playerLog, news: withNews(state, [h.text]), timeline: withTimeline(state, kind, h.text) };
+      let next: UniverseState = { ...state, league, weird: born, ages, experience, playerLog, news: withNews(state, [h.text]), timeline: withTimeline(state, kind, h.text) };
       for (const c of h.changes) {
         if (c.kind !== 'death') continue;
         const t = state.league.teams.find((x) => x.id === c.teamId)!;
@@ -897,7 +972,7 @@ function newSeason(s: UniverseState): UniverseState {
     statsBySeason: { ...s.statsBySeason, [s.season]: s.seasonStats },
     playerLog,
     coins: s.coins + DAILY_STIPEND,
-    weird: { ...expireMods(s.weird, season, 1), playerStatus },
+    weird: { ...expireMods(s.weird, season, 1), playerStatus, playerMods: { ...expireMods(s.weird, season, 1).playerMods, ...bornWith(s.settings.seed, off.retired.map((r) => r.rookieId)) } },
     news: withNews({ ...s, season }, [`Season ${season} begins!`, ...retireNews], 1),
     timeline: [
       ...s.timeline,

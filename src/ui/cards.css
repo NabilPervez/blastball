@@ -130,3 +130,30 @@ button.player-card:hover { transform: translateY(-3px); box-shadow: 0 12px 28px 
   .player-card.t-legendary, .m-blessed .pc-art::before, .m-tornado-touched .pc-art .card-art { animation: none; }
 }
 .player-card.lg.flippable .pc-body { padding-bottom: 28px; }
+
+/* Links inside running text: names of players and teams. */
+.inline-link { background: none; border: 0; padding: 0; font: inherit; color: var(--accent); text-decoration: underline; text-decoration-color: rgba(46, 139, 255, 0.4); text-underline-offset: 2px; cursor: pointer; }
+.inline-link:hover { text-decoration-color: currentColor; }
+
+/* Quick bets */
+.mass-bet { margin: 16px 0; display: grid; gap: 10px; }
+.mass-bet-title { margin: 0; }
+.mass-bet-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.mass-bet-actions .btn { margin: 0; }
+
+/* Team identity */
+.team-motto { font-style: italic; color: var(--secondary); }
+.team-bio { margin: 12px 0; line-height: 1.5; }
+.team-perk { display: flex; gap: 12px; align-items: center; margin: 12px 0; border-left: 4px solid var(--secondary); }
+.team-perk-icon { font-size: 1.8rem; line-height: 1; }
+.team-rivals { margin: 8px 0 12px; }
+.rival-tag { color: var(--bad); font-weight: 700; white-space: nowrap; }
+.h2h-table th[scope='row'] { text-align: left; }
+.h2h-table .rival-row th, .h2h-table .rival-row td { background: rgba(255, 107, 107, 0.07); }
+
+/* Combo traits get a gold edge on their chip. */
+.pc-trait.combo { border-color: var(--secondary); color: var(--secondary); }
+.m-werewolf .pc-art .card-art { filter: hue-rotate(200deg) saturate(1.4); }
+.m-supernova .pc-art { box-shadow: inset 0 0 50px rgba(255, 220, 90, 0.7); }
+.m-the-machine .pc-art .card-art { filter: grayscale(0.6) contrast(1.3); }
+.m-airborne .pc-art .card-art { transform: translateY(-6px); }

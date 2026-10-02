@@ -156,7 +156,7 @@ describe('save fixtures', () => {
     const { migrateSave } = await import('../src/storage/migrate');
     const raw = (await import('./fixtures/save-v6.json')).default;
     const u = migrateSave(structuredClone(raw));
-    const strip = (x: object) => ({ ...x, saveVersion: undefined, factionOpinion: undefined, picks: undefined, pickEarnings: undefined, lastBailoutDay: undefined, experience: undefined, collection: undefined });
+    const strip = (x: object) => ({ ...x, saveVersion: undefined, factionOpinion: undefined, picks: undefined, pickEarnings: undefined, lastBailoutDay: undefined, experience: undefined, collection: undefined, h2h: undefined, weird: undefined });
     expect(strip(u)).toEqual(strip(raw));
     expect(u.factionOpinion).toEqual({});
     expect(u.collection).toEqual([]);

@@ -102,7 +102,7 @@ function Traits({ mods, max }: { mods: ShownMod[]; max: number }) {
   return (
     <span className="pc-traits">
       {shown.map((m) => (
-        <span key={m.def.id} className="pc-trait" title={`${m.def.name}: ${m.def.description}`}>
+        <span key={m.def.id} className={`pc-trait ${m.def.comboOnly ? 'combo' : ''}`} title={`${m.def.name}: ${m.def.description}`}>
           <span aria-hidden="true">{m.def.icon}</span> {m.def.name}
         </span>
       ))}

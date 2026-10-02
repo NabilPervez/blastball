@@ -9,6 +9,7 @@ import { MAX_BACKED, MAX_FADED, PICK_RATES } from '../../world/picks';
 import { BAILOUT_COINS, DAILY_STIPEND, FAVORITE_WIN_BONUS, PATRON_BLESSING, PATRON_COST, PATRON_FROM_SEASON, RULES, STARTING_COINS } from '../../world/universe';
 import { BACKUP_EVERY_DAYS } from '../components/TimeBits';
 import { useGame } from '../store';
+import { RIVAL_MIN_GAMES } from '../../world/teams';
 
 type Status = 'live' | 'soon';
 
@@ -149,6 +150,9 @@ export function Guide() {
         </p>
         <p className="muted small">You can add to a bet, but you can't back both sides of the same game.</p>
         <p>
+          <strong>Quick bets</strong>: on the Games tab, pick an amount and tap once to put it on every favorite (or every underdog) in today's open games.
+        </p>
+        <p>
           <strong>Broke?</strong> If you run out of coins with no bets still riding, the league office hands you {BAILOUT_COINS} coins to get back in the game (at most once a day).
         </p>
       </Section>
@@ -202,10 +206,25 @@ export function Guide() {
           <li>
             <strong>Player traits</strong> (named on every card; some, like Ageless or Burning Bright, change how a player ages):{' '}
             {RULES.playerMods
-              .filter((m) => !m.returnedOnly)
+              .filter((m) => !m.returnedOnly && !m.comboOnly)
               .map((m) => `${m.icon} ${m.name}`)
               .join(', ')}
-            . Some last days, some are permanent.
+            . Some last days, some are permanent. Many players are born with one or two, so every season opens with a mix of card rarities.
+          </li>
+          <li>
+            <strong>Combos</strong>: when a player holds two traits that belong together, they fuse into something stronger —{' '}
+            {(RULES.combos ?? [])
+              .map((c) => `${c.needs.map((n) => RULES.playerMods.find((m) => m.id === n)!.name).join(' + ')} = ${RULES.playerMods.find((m) => m.id === c.result)!.name}`)
+              .join('; ')}
+            .
+          </li>
+          <li>
+            <strong>Contagious traits</strong> spread to teammates for a few days:{' '}
+            {RULES.playerMods
+              .filter((m) => m.contagion)
+              .map((m) => `${m.icon} ${m.name}`)
+              .join(', ')}
+            . Higher chaos spreads them faster, and a spread can set off a combo.
           </li>
           <li>
             <strong>Stadium effects</strong>: {RULES.stadiumMods.map((m) => `${m.icon} ${m.name}`).join(', ')}. See them on a team's page.
@@ -229,6 +248,13 @@ export function Guide() {
           After the regular season the top four teams (top two in a 4-team league) play for the <strong>Blastball Cup</strong>: semifinals are best of {SEMIS_BEST_OF}, the final best of {FINAL_BEST_OF}. Playoff games don't count in the standings. The season's MVP and Ace (best pitcher) are named at the end.
         </p>
         <p>Then comes a one-day offseason. Everyone ages a year. Careers have an arc: players are <em>Rising</em> until 26, in their <em>Prime</em> from 27 to 30, then <em>Fading</em> and finally in their <em>Twilight</em> before they retire, replaced by rookies. A new league starts mid-history, so most players already have a few seasons behind them. A new schedule is drawn and Season N+1 begins.</p>
+      </Section>
+
+      <Section id="teams" title="Teams & rivalries">
+        <p>Every team has a short history, a motto, and one <strong>team perk</strong> no other team has — a small ratings boost like Sticky Gloves (+5 defense) or Home Cooking (stronger at home).</p>
+        <p>
+          A team's page keeps its all-time record and head-to-head results against every opponent. Teams that meet {RIVAL_MIN_GAMES}+ times with a close record become <strong>rivals</strong>: both sides play harder (+3 contact, power, velocity and stuff) whenever they meet.
+        </p>
       </Section>
 
       <Section id="patron" title="Patron">
