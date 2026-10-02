@@ -17,26 +17,53 @@
   "maskableIconUrl": "https://blastball-sim.netlify.app/icons/maskable-512.png",
   "monochromeIconUrl": "https://blastball-sim.netlify.app/icons/monochrome-512.png",
   "splashScreenFadeOutDuration": 300,
-  "signingKey": { "path": "./android.keystore", "alias": "blastball" },
+  "signingKey": {
+    "path": "./android.keystore",
+    "alias": "blastball"
+  },
   "appVersionName": "1.0.0",
-  "appVersionCode": 1,
+  "appVersionCode": 2,
   "shortcuts": [
-    { "name": "Today", "shortName": "Today", "url": "/?tab=today&source=shortcut", "chosenIconUrl": "https://blastball-sim.netlify.app/icons/shortcut-today.png" },
-    { "name": "Games", "shortName": "Games", "url": "/?tab=games&source=shortcut", "chosenIconUrl": "https://blastball-sim.netlify.app/icons/shortcut-games.png" },
-    { "name": "Vote", "shortName": "Vote", "url": "/?tab=vote&source=shortcut", "chosenIconUrl": "https://blastball-sim.netlify.app/icons/shortcut-vote.png" },
-    { "name": "History", "shortName": "History", "url": "/?tab=history&source=shortcut", "chosenIconUrl": "https://blastball-sim.netlify.app/icons/shortcut-history.png" }
+    {
+      "name": "Today",
+      "shortName": "Today",
+      "url": "/?tab=today&source=shortcut",
+      "chosenIconUrl": "https://blastball-sim.netlify.app/icons/shortcut-today.png"
+    },
+    {
+      "name": "Games",
+      "shortName": "Games",
+      "url": "/?tab=games&source=shortcut",
+      "chosenIconUrl": "https://blastball-sim.netlify.app/icons/shortcut-games.png"
+    },
+    {
+      "name": "Vote",
+      "shortName": "Vote",
+      "url": "/?tab=vote&source=shortcut",
+      "chosenIconUrl": "https://blastball-sim.netlify.app/icons/shortcut-vote.png"
+    },
+    {
+      "name": "History",
+      "shortName": "History",
+      "url": "/?tab=history&source=shortcut",
+      "chosenIconUrl": "https://blastball-sim.netlify.app/icons/shortcut-history.png"
+    }
   ],
   "generatorApp": "bubblewrap-cli",
   "webManifestUrl": "https://blastball-sim.netlify.app/manifest.webmanifest",
   "fallbackType": "customtabs",
   "features": {},
-  "alphaDependencies": { "enabled": false },
+  "alphaDependencies": {
+    "enabled": false
+  },
   "enableSiteSettingsShortcut": true,
   "isChromeOSOnly": false,
   "isMetaQuest": false,
+  "minSdkVersion": 21,
   "orientation": "default",
   "fingerprints": [],
   "additionalTrustedOrigins": [],
   "retainedBundles": [],
-  "minSdkVersion": 21
+  "displayOverride": [],
+  "appVersion": "1.0.0"
 }
