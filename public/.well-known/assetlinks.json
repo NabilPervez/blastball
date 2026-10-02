@@ -5,8 +5,8 @@
       "namespace": "android_app",
       "package_name": "com.nabilpervez.blastball",
       "sha256_cert_fingerprints": [
-        "REPLACE_WITH_PLAY_APP_SIGNING_SHA256",
-        "REPLACE_WITH_UPLOAD_KEY_SHA256"
+        "6A:3A:34:43:8E:1E:54:8E:73:31:AB:D8:45:76:FF:6D:28:88:5C:21:71:B5:84:4E:FF:C1:27:94:E8:85:AE:C2",
+        "32:AA:04:46:D2:20:22:D6:8A:18:81:C9:11:CF:48:47:A1:69:22:D6:50:4A:B1:A6:C5:18:C2:A3:2F:71:DD:2B"
       ]
     }
   }
