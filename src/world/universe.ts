@@ -24,7 +24,7 @@ export const RULES = mergePacks(DEFAULT_PACKS);
  * `reduce(state, event)`, so the same events always produce the same state.
  */
 
-export const SAVE_VERSION = 10;
+export const SAVE_VERSION = 11;
 
 /** Out of coins with nothing riding? The league office tops you back up (once a day). */
 export const BAILOUT_COINS = 100;
@@ -109,6 +109,7 @@ export interface LedgerEntry {
 
 export interface UniverseState {
   saveVersion: number;
+  /** Engine the current season is simmed with. Saves from before Sprint 12 move to the new engine at their next season. */
   engineVersion: number;
   id: string;
   createdAt: number;
@@ -771,6 +772,8 @@ export interface PlayByPlay {
   gameId: string;
   day: number;
   season: number;
+  /** Engine that simmed it; rows saved before Sprint 12 have none (engine v2 or older). */
+  engineVersion: number;
   events: GameEvent[];
 }
 
@@ -796,7 +799,7 @@ export function runCommand(start: UniverseState, cmd: Command): CommandResult {
 
   const play = (game: ScheduledGame) => {
     if (state.results[game.id]) return;
-    const result = simulateGame(gameLeague(state, game), game, state.season);
+    const result = simulateGame(gameLeague(state, game), game, state.season, state.engineVersion);
     apply({
       type: 'gamePlayed',
       summary: {
@@ -810,7 +813,7 @@ export function runCommand(start: UniverseState, cmd: Command): CommandResult {
       },
       box: boxScore(result),
     });
-    pbp.push({ gameId: game.id, day: game.day, season: state.season, events: result.events });
+    pbp.push({ gameId: game.id, day: game.day, season: state.season, engineVersion: state.engineVersion, events: result.events });
   };
 
   const endDay = () => {
@@ -853,7 +856,7 @@ export function runCommand(start: UniverseState, cmd: Command): CommandResult {
 /** Recreate a game's play-by-play from its seed (works for any game, since the sim is deterministic). */
 export function replayGame(state: UniverseState, gameId: string): GameEvent[] {
   const game = state.schedule.find((g) => g.id === gameId)!;
-  return simulateGame(gameLeague(state, game), game, state.season).events;
+  return simulateGame(gameLeague(state, game), game, state.season, state.engineVersion).events;
 }
 
 const rollInput = (s: UniverseState) => ({
@@ -981,6 +984,8 @@ function newSeason(s: UniverseState): UniverseState {
 
   let next: UniverseState = {
     ...s,
+    // A new season is the only time the engine changes, so bets and picks never straddle two engines.
+    engineVersion: ENGINE_VERSION,
     season,
     phase: 'regular',
     currentDay: 1,

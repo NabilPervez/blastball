@@ -79,7 +79,8 @@ describe('narrative templates v2', () => {
         const line = describeEvent(league, game, result.events, i, { favoriteTeamId: game.homeId, modName: () => 'Glasses' });
         expect(line.trim().length, templateKind(result.events[i])).toBeGreaterThan(0);
         expect(line).not.toMatch(/[{}]/);
-        expect(line).not.toMatch(/(^|[.!?] )[a-z]/);
+        expect(line).not.toMatch(/(^|(?<!\.\.)[.!?] )[a-z]/);
+        expect(line).not.toMatch(/\.\.\. [A-Z][a-z]+n't/); // "had it... And didn't"
       });
     }
   });

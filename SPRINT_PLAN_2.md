@@ -66,12 +66,22 @@ Everything in Plan 1's Universal DoD still applies (tests green, lint clean incl
 
 **Definition of Done — Sprint 12**
 - [ ] Universal DoD met.
-- [ ] Fixture test: a v10 mid-season save sims the rest of its season identically to the old build.
-- [ ] Fixture test: a pinned v1 game replays identically.
-- [ ] Rate test over 500 seeded games: every new event falls inside its PRD band.
-- [ ] Migration v10 → v11 has a fixture save (`tests/fixtures/save-v10.json`) and test.
-- [ ] New box score columns show on mobile without horizontal page scroll (scroll inside the table only).
-- [ ] Guide updated: new events, new pick lines.
+- [x] Fixture test: a v10 mid-season save sims the rest of its season identically to the old build (scores and every stat line; fixture captured from the pre-Sprint-12 build).
+- [x] Fixture test: a pinned v1 game replays identically (50 games fingerprinted from the pre-Sprint-12 engine; the frozen copy reproduces all 50).
+- [x] Rate test over 500 seeded games: every new event falls inside its PRD band.
+- [x] Migration v10 → v11 has a fixture save (`tests/fixtures/save-v10.json`) and test.
+- [x] New box score columns show on mobile without horizontal page scroll (scroll inside the table only). Checked at 375px in the browser.
+- [x] Guide updated: new events, new pick lines (plus the rating tooltips and the pick hint on player pages).
+
+**Sprint 12 notes**
+- **Version numbers.** Saves already recorded `engineVersion` 1 or 2, and both run the same code (v2 added batters' arm/eye/bat in an earlier sprint). So the PRD's "engine v2" is **`ENGINE_VERSION = 3`** in code, and the frozen copy is `src/engine/v2/game.ts`, named after its real version. `simulateGame(..., engineVersion)` uses the frozen copy for versions ≤ 2.
+- **Switching engines.** A save keeps its engine until its next season starts (`newSeason` sets the current version); new universes start on v3. Migration v10 → v11 keeps `engineVersion` (capped at 2) and fills the new stat columns with 0 in season, career and past-season stats. Stored game rows now record `engineVersion`; older rows have none, which means v2 or older.
+- **Tuned rates** (per team-game over 500 games, Normal chaos; PRD band in brackets): steal attempts 0.67 [0.5–0.8] with 73% success [~70%], pickoffs 0.08 [0.05–0.1], errors 0.54 [0.4–0.7], double plays 0.73 [0.6–1.0], wild pitches 0.26 [0.2–0.4], HBP 0.39 [0.3–0.5]. Scoring rose from 4.14 to 4.24 runs per team-game.
+- **Engine details.** Pickoff is checked before the steal, before each pitch, for the lead runner with an open base ahead. A third out on the bases ends the inning, and that batter leads off next inning (the unfinished trip doesn't count as a PA). Errors put the batter on first and move every runner up one base. Pickoffs count as CS. Outs in v3 also name the fielder, so play-by-play uses the real one.
+- **Not done (P1/P2):** "Speedster" / "Iron Glove" card tags, catcher arm rating.
+- **Perf:** 7-day catch-up for 16 teams took 49 ms in Node. Not yet checked on a real Android phone.
+
+**PRD Open Question 1 — answered (2026-10-04):** the Hype Squad perk must **not** change game results directly. Nabil: "not game results, but player stats mods are ok." To confirm at the start of Sprint 14: does a stat mod (a rating boost, which feeds the sim) count as allowed, or only stat-display/economy effects?
 
 ---
 
@@ -206,9 +216,9 @@ Everything in Plan 1's Universal DoD still applies (tests green, lint clean incl
 | Sprint | Status |
 |---|---|
 | 11 — Narrative v2 | ✅ Done (except Nabil's read-aloud spot check) — play-by-play from `content/narrative/templates.json`, pure context builder, weighted-specificity selection, per-game no-repeat, validator. Notes below. |
-| 12 — Engine v2 | Not started |
+| 12 — Engine v2 | ✅ Done — engine v3 in code (see notes), frozen v2 engine, six new events in band, new stats/leaders/pick lines, save v11. |
 | 13 — Environment events | Not started |
-| 14 — Streaks & personas | Not started (blocked on PRD Open Question 1) |
+| 14 — Streaks & personas | Not started. Open Question 1 answered (see notes). |
 | 15 — Achievements | Not started (needs Commissioner flag or stub) |
 | 16 — Binder & stories | Not started |
 | 17 — Shareable moments | Not started |

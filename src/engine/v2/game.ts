@@ -1,12 +1,10 @@
-import { createRng, type Rng } from './rng';
-import type { Bases, GameEvent, GameResult, Half, HitKind, League, OutKind, Player, ScheduledGame, Team } from './types';
-import { simulateGameV2 } from './v2/game';
-
 /**
- * Bump when a change would alter simulated outcomes for the same seed.
- * v3 (Sprint 12, "engine v2" in PRD 2): steals, pickoffs, errors, double plays, wild pitches, hit by pitch.
+ * FROZEN: engine v2, exactly as it shipped before Sprint 12. Never edit this file.
+ * Seasons simmed with engineVersion <= 2 (every save created before Sprint 12) keep using it until
+ * their next season starts, so results never change mid-season. New engine work goes in ../game.ts.
  */
-export const ENGINE_VERSION = 3;
+import { createRng, type Rng } from '../rng';
+import type { Bases, GameEvent, GameResult, Half, HitKind, League, OutKind, Player, ScheduledGame, Team } from '../types';
 
 const MAX_INNINGS = 30; // safety valve; extra-inning ghost runners make this practically unreachable
 
@@ -24,10 +22,11 @@ export function startingPitcher(team: Team, day: number): string {
 /** A fielder's throwing arm: Velocity nudges their defense (±10 at the extremes). */
 const armBonus = (velocity: number) => Math.trunc((velocity - 50) / 5);
 
-const fieldingRating = (r: Player['ratings']) => r.defense + armBonus(r.velocity);
-
 function teamDefense(league: League, team: Team): number {
-  const total = team.lineup.reduce((sum, id) => sum + fieldingRating(league.players[id].ratings), 0);
+  const total = team.lineup.reduce((sum, id) => {
+    const r = league.players[id].ratings;
+    return sum + r.defense + armBonus(r.velocity);
+  }, 0);
   return Math.floor(total / team.lineup.length);
 }
 
@@ -39,59 +38,17 @@ export function batterView(r: Player['ratings']): Player['ratings'] {
   return { ...r, discipline: r.discipline + Math.trunc((r.control - 50) / 5), power: r.power + Math.trunc((r.stuff - 50) / 5) };
 }
 
-/** Positions that can field each kind of out (DH never fields). Repeats weight the draw. */
-const FIELDERS: Record<OutKind, readonly string[]> = {
-  groundout: ['SS', 'SS', '2B', '2B', '3B', '3B', '1B', 'C'],
-  popout: ['C', '1B', '2B', '3B', 'SS'],
-  lineout: ['1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF'],
-  flyout: ['LF', 'CF', 'CF', 'RF'],
-};
-
-/**
- * Event rates, all integer math. Most are per ten-thousand (rolled with `rng.int(10000)`) since
- * per-mille is too coarse for once-a-game events. Tuned against PRD 2 §E1's bands by the rate test.
- */
-export const RATES = {
-  /** Per ten-thousand, each ball: the pitch hits the batter instead. */
-  hbp: (control: number) => clamp(105 + (50 - control) * 2, 25, 220),
-  /** Per ten-thousand, each ball with runners on: it gets past the catcher. */
-  wildPitch: (control: number, stuff: number) => clamp(150 + (50 - control) * 3 + Math.trunc((stuff - 50) / 2), 40, 350),
-  /** Per ten-thousand, each pitch a runner could steal: the pitcher throws over and gets him. */
-  pickoff: (control: number, speed: number) => clamp(13 + Math.trunc((control - 50) / 3) + Math.trunc((50 - speed) / 3), 4, 50),
-  /** Per ten-thousand, each pitch a runner could steal: he goes. */
-  stealAttempt: (speed: number) => clamp(140 + (speed - 50) * 5, 15, 400),
-  /** Per mille: the steal succeeds. */
-  stealSuccess: (speed: number, control: number, catcher: number) => clamp(670 + (speed - 50) * 5 - (control - 50) * 2 - (catcher - 50) * 3, 300, 950),
-  /** Per mille, each out in play: the fielder boots it. */
-  error: (fielding: number) => clamp(26 + Math.trunc((50 - fielding) / 2), 6, 60),
-  /** Per mille, each groundout with a runner on first and < 2 outs: they turn two. */
-  doublePlay: (batterSpeed: number, teamDefense: number) => clamp(620 + (50 - batterSpeed) * 4 + (teamDefense - 50) * 3, 200, 850),
-};
-
 type EmitPayload = { kind: GameEvent['kind'] } & Record<string, unknown>;
 
-/**
- * Simulate a game. `engineVersion` is the universe's: seasons started before Sprint 12 keep the
- * frozen v2 engine until their next season, so results never change mid-season.
- */
-export function simulateGame(league: League, game: ScheduledGame, seasonId = 1, engineVersion = ENGINE_VERSION): GameResult {
-  if (engineVersion <= 2) return simulateGameV2(league, game, seasonId);
-  return simulateGameV3(league, game, seasonId);
-}
-
-function simulateGameV3(league: League, game: ScheduledGame, seasonId: number): GameResult {
+export function simulateGameV2(league: League, game: ScheduledGame, seasonId = 1): GameResult {
   const rng: Rng = createRng(...gameSeed(league.seed, seasonId, game.id));
   const away = league.teams.find((t) => t.id === game.awayId)!;
   const home = league.teams.find((t) => t.id === game.homeId)!;
   const p = (id: string): Player => league.players[id];
-  const perTenK = (n: number) => rng.int(10000) < n;
 
   const pitchers = { away: startingPitcher(away, game.day), home: startingPitcher(home, game.day) };
   const defense = { away: teamDefense(league, away), home: teamDefense(league, home) };
   const order = { away: 0, home: 0 };
-
-  /** Each team's fielder at a position (falls back to the first in the lineup). */
-  const fielderAt = (team: Team, pos: string) => team.lineup.find((id) => p(id).position === pos) ?? team.lineup[0];
 
   const events: GameEvent[] = [];
   const s = {
@@ -121,7 +78,6 @@ function simulateGameV3(league: League, game: ScheduledGame, seasonId: number): 
   const battingSide = () => (s.half === 'top' ? 'away' : 'home');
   const fieldingSide = () => (s.half === 'top' ? 'home' : 'away');
   const battingTeam = () => (s.half === 'top' ? away : home);
-  const fieldingTeam = () => (s.half === 'top' ? home : away);
 
   const isWalkOff = () => s.half === 'bottom' && s.inning >= 9 && s.score.home > s.score.away;
 
@@ -129,12 +85,6 @@ function simulateGameV3(league: League, game: ScheduledGame, seasonId: number): 
     s.score[battingSide()] += 1;
     emit({ kind: 'run', runnerId, teamId: battingTeam().id });
     if (isWalkOff()) over = true;
-  };
-  const scoreAll = (runners: string[]) => {
-    for (const r of runners) {
-      if (over) break;
-      scoreRun(r);
-    }
   };
 
   /** Chance (per mille) a runner takes an extra base, driven by speed. */
@@ -172,11 +122,13 @@ function simulateGameV3(league: League, game: ScheduledGame, seasonId: number): 
       next[0] = batterId;
     }
     s.bases = next;
-    scoreAll(scorers);
+    for (const r of scorers) {
+      if (over) break;
+      scoreRun(r);
+    }
   };
 
-  /** Batter to first; only forced runners move (walks, hit by pitch). */
-  const forceToFirst = (batterId: string) => {
+  const walk = (batterId: string) => {
     const [first, second, third] = s.bases;
     if (first && second && third) {
       s.bases = [batterId, first, second];
@@ -190,13 +142,6 @@ function simulateGameV3(league: League, game: ScheduledGame, seasonId: number): 
     }
   };
 
-  /** Every runner moves up one base (wild pitches, errors). Returns who scored. */
-  const everyoneUp = (batterId: string | null): string[] => {
-    const [first, second, third] = s.bases;
-    s.bases = [batterId, first, second];
-    return third ? [third] : [];
-  };
-
   const strike = (ids: { batterId: string; pitcherId: string }, called: boolean): boolean => {
     s.strikes += 1;
     if (s.strikes === 3) {
@@ -208,32 +153,6 @@ function simulateGameV3(league: League, game: ScheduledGame, seasonId: number): 
     }
     emit({ kind: called ? 'calledStrike' : 'swingingStrike', ...ids });
     return false;
-  };
-
-  /**
-   * Before a pitch: a lead runner with an open base ahead may be picked off or try to steal.
-   * Returns true if the inning ended (a third out on the bases).
-   */
-  const runnerGame = (pitcherId: string): boolean => {
-    const from: 1 | 2 | null = s.bases[1] && !s.bases[2] ? 2 : s.bases[0] && !s.bases[1] ? 1 : null;
-    if (!from) return false;
-    const runnerId = s.bases[from - 1]!;
-    const speed = p(runnerId).ratings.speed;
-    const control = p(pitcherId).ratings.control;
-    if (perTenK(RATES.pickoff(control, speed))) {
-      s.bases[from - 1] = null;
-      s.outs += 1;
-      emit({ kind: 'pickoff', runnerId, base: from, pitcherId });
-      return s.outs >= 3;
-    }
-    if (!perTenK(RATES.stealAttempt(speed))) return false;
-    const catcher = fieldingRating(p(fielderAt(fieldingTeam(), 'C')).ratings);
-    const success = rng.chance(RATES.stealSuccess(speed, control, catcher));
-    s.bases[from - 1] = null;
-    if (success) s.bases[from] = runnerId;
-    else s.outs += 1;
-    emit({ kind: 'stealAttempt', runnerId, from, pitcherId, success });
-    return s.outs >= 3;
   };
 
   const plateAppearance = () => {
@@ -254,35 +173,16 @@ function simulateGameV3(league: League, game: ScheduledGame, seasonId: number): 
     const hitPm = clamp(330 + (b.contact - pr.velocity) * 2 - (defense[fieldingSide()] - 50), 180, 460);
 
     for (;;) {
-      if (runnerGame(pitcherId)) {
-        // Third out on the bases: this batter leads off next inning instead.
-        order[side] -= 1;
-        return;
-      }
       if (rng.chance(ballPm)) {
-        if (perTenK(RATES.hbp(pr.control))) {
-          s.balls = 0;
-          s.strikes = 0;
-          emit({ kind: 'hitByPitch', ...ids });
-          forceToFirst(batterId);
-          return;
-        }
         s.balls += 1;
         if (s.balls === 4) {
           s.balls = 0;
           s.strikes = 0;
           emit({ kind: 'walk', ...ids });
-          forceToFirst(batterId);
+          walk(batterId);
           return;
         }
         emit({ kind: 'ball', ...ids });
-        if (s.bases.some(Boolean) && perTenK(RATES.wildPitch(pr.control, pr.stuff))) {
-          const advanced = s.bases.filter((r): r is string => r !== null);
-          const scored = everyoneUp(null);
-          emit({ kind: 'wildPitch', pitcherId, advanced });
-          scoreAll(scored);
-          if (over) return;
-        }
         continue;
       }
       if (rng.chance(220)) {
@@ -319,32 +219,11 @@ function simulateGameV3(league: League, game: ScheduledGame, seasonId: number): 
         return;
       }
       const out: OutKind = rng.pick(['groundout', 'groundout', 'flyout', 'flyout', 'lineout', 'popout'] as const);
-      const fielderId = fielderAt(fieldingTeam(), rng.pick(FIELDERS[out]));
-
-      if (rng.chance(RATES.error(fieldingRating(p(fielderId).ratings)))) {
-        emit({ kind: 'error', fielderId, batterId, pitcherId, onKind: out, bases: 1 });
-        scoreAll(everyoneUp(batterId));
-        return;
-      }
-
-      const runnerOnFirst = s.bases[0];
-      if (out === 'groundout' && runnerOnFirst && s.outs < 2 && rng.chance(RATES.doublePlay(b.speed, defense[fieldingSide()]))) {
-        s.outs += 2;
-        const [, second, third] = s.bases;
-        s.bases = [null, null, null];
-        emit({ kind: 'doublePlay', batterId, pitcherId, runnerOutId: runnerOnFirst, fielderId });
-        if (s.outs < 3) {
-          s.bases = [null, null, second];
-          if (third) scoreRun(third);
-        }
-        return;
-      }
-
       const runnerOnThird = s.bases[2];
       const canTagUp = runnerOnThird !== null && s.outs < 2 && (out === 'flyout' || out === 'groundout');
       const sacrifice = canTagUp && extraBase(runnerOnThird, out === 'flyout' ? 650 : 300);
       s.outs += 1;
-      emit({ kind: 'out', ...ids, out, sacrifice, fielderId });
+      emit({ kind: 'out', ...ids, out, sacrifice });
       if (sacrifice && runnerOnThird) {
         s.bases = [s.bases[0], s.bases[1], null];
         scoreRun(runnerOnThird);

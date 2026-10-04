@@ -1,3 +1,4 @@
+import { fullLine, type StatLine } from '../engine/boxScore';
 import { createFactions } from '../world/factions';
 import { initialAge, initialExperience } from '../world/seasons';
 import { createStadiums } from '../world/weird';
@@ -106,6 +107,20 @@ export const migrations: Record<number, Migration> = {
       h2h[w] = { ...(h2h[w] ?? {}), [l]: (h2h[w]?.[l] ?? 0) + 1 };
     }
     return { ...save, weird: { ...weird, playerMods }, h2h };
+  },
+  // v10 → v11 (Sprint 12): engine v3 (steals, errors, double plays…) and new stat columns.
+  // The save keeps the engine it was created on until its next season starts, so the rest of this
+  // season sims exactly as before. Saved stat lines gain the new columns at 0.
+  10: (save) => {
+    const fill = (lines: Record<string, Partial<StatLine>>) => Object.fromEntries(Object.entries(lines ?? {}).map(([id, l]) => [id, fullLine(l)]));
+    const bySeason = (save.statsBySeason ?? {}) as Record<string, Record<string, Partial<StatLine>>>;
+    return {
+      ...save,
+      engineVersion: Math.min((save.engineVersion as number | undefined) ?? 2, 2),
+      seasonStats: fill(save.seasonStats as Record<string, Partial<StatLine>>),
+      careerStats: fill(save.careerStats as Record<string, Partial<StatLine>>),
+      statsBySeason: Object.fromEntries(Object.entries(bySeason).map(([season, lines]) => [season, fill(lines)])),
+    };
   },
 };
 

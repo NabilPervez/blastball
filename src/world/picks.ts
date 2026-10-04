@@ -25,6 +25,9 @@ export const PICK_RATES = {
   fadeHitless: 4, // faded hitter: hitless game with 3+ at-bats
   fadeHitAllowed: 1, // faded pitcher: per hit allowed
   fadeRunAllowed: 2, // faded pitcher: per run allowed
+  backSteal: 2, // backed hitter: per stolen base
+  fadeCaught: 3, // faded hitter: per caught stealing / picked off, or grounded into a double play
+  fadeWildPitch: 1, // faded pitcher: per wild pitch
 } as const;
 
 export const emptyPicks = (): Picks => ({ back: [], fade: [] });
@@ -44,16 +47,24 @@ export function pickPayout(picks: Picks, box: BoxScore, league: League): PickLin
     const p = league.players[id];
     if (!s || !p) continue;
     if (p.role === 'pitcher') add(id, s.pk * PICK_RATES.backStrikeout, `${s.pk} K`);
-    else add(id, s.h * PICK_RATES.backHit + s.hr * PICK_RATES.backHomeRun, s.hr ? `${s.h} H, ${s.hr} HR` : `${s.h} H`);
+    else {
+      const sb = s.sb ?? 0;
+      const why = [`${s.h} H`, s.hr ? `${s.hr} HR` : '', sb ? `${sb} SB` : ''].filter(Boolean).join(', ');
+      add(id, s.h * PICK_RATES.backHit + s.hr * PICK_RATES.backHomeRun + sb * PICK_RATES.backSteal, why);
+    }
   }
   for (const id of picks.fade) {
     const s = box[id];
     const p = league.players[id];
     if (!s || !p) continue;
-    if (p.role === 'pitcher') add(id, s.ha * PICK_RATES.fadeHitAllowed + s.ra * PICK_RATES.fadeRunAllowed, `${s.ha} H, ${s.ra} R allowed`);
-    else {
+    if (p.role === 'pitcher') {
+      const wp = s.wp ?? 0;
+      add(id, s.ha * PICK_RATES.fadeHitAllowed + s.ra * PICK_RATES.fadeRunAllowed + wp * PICK_RATES.fadeWildPitch, `${s.ha} H, ${s.ra} R allowed${wp ? `, ${wp} WP` : ''}`);
+    } else {
       const hitless = s.ab >= 3 && s.h === 0;
-      add(id, s.k * PICK_RATES.fadeStrikeout + (hitless ? PICK_RATES.fadeHitless : 0), hitless ? `0-for-${s.ab}, ${s.k} K` : `${s.k} K`);
+      const caught = (s.cs ?? 0) + (s.gidp ?? 0);
+      const why = [hitless ? `0-for-${s.ab}` : '', `${s.k} K`, s.cs ? `${s.cs} CS` : '', s.gidp ? `${s.gidp} GIDP` : ''].filter(Boolean).join(', ');
+      add(id, s.k * PICK_RATES.fadeStrikeout + (hitless ? PICK_RATES.fadeHitless : 0) + caught * PICK_RATES.fadeCaught, why);
     }
   }
   return lines;

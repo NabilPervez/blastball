@@ -27,6 +27,8 @@ export interface GameRow {
   gameId: string;
   day: number;
   pinned: boolean;
+  /** Engine that simmed it; missing on rows saved before Sprint 12 (engine v2 or older). */
+  engineVersion?: number;
   events: GameEvent[];
 }
 
@@ -117,7 +119,7 @@ export async function persistCommand(prev: UniverseState, result: CommandResult,
       );
     }
     if (pbp.length) {
-      await d.games.bulkPut(pbp.map((p) => ({ universeId: state.id, season: p.season, gameId: p.gameId, day: p.day, pinned: false, events: p.events })));
+      await d.games.bulkPut(pbp.map((p) => ({ universeId: state.id, season: p.season, gameId: p.gameId, day: p.day, pinned: false, engineVersion: p.engineVersion, events: p.events })));
     }
     if (state.currentDay !== prev.currentDay) {
       await saveSnapshot(state, isSeasonOver(state) ? 'seasonEnd' : 'daily', d, now);

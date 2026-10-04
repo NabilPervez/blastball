@@ -433,6 +433,8 @@ export function StatTable({ player, season, career }: { player: Player; season: 
         ['ERA', era],
         ['K', (s) => s.pk],
         ['BB', (s) => s.pbb],
+        ['WP', (s) => s.wp ?? 0],
+        ['HBP', (s) => s.phbp ?? 0],
       ]
     : [
         ['G', (s) => s.g],
@@ -442,32 +444,40 @@ export function StatTable({ player, season, career }: { player: Player; season: 
         ['R', (s) => s.r],
         ['BB', (s) => s.bb],
         ['K', (s) => s.k],
+        ['SB', (s) => s.sb ?? 0],
+        ['CS', (s) => s.cs ?? 0],
+        ['GIDP', (s) => s.gidp ?? 0],
+        ['HBP', (s) => s.hbp ?? 0],
+        ['E', (s) => s.e ?? 0],
       ];
+  // Many columns: the table scrolls sideways inside its own box, never the page.
   return (
-    <table className="stat-table">
-      <thead>
-        <tr>
-          <th scope="col">
-            <span className="sr-only">Span</span>
-          </th>
-          {cols.map(([h]) => (
-            <th key={h} scope="col">
-              {h}
+    <div className="stat-table-scroll" role="region" aria-label="Stats" tabIndex={0}>
+      <table className="stat-table">
+        <thead>
+          <tr>
+            <th scope="col">
+              <span className="sr-only">Span</span>
             </th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map(([label, s]) => (
-          <tr key={label}>
-            <th scope="row">{label}</th>
-            {cols.map(([h, f]) => (
-              <td key={h}>{f(s)}</td>
+            {cols.map(([h]) => (
+              <th key={h} scope="col">
+                {h}
+              </th>
             ))}
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {rows.map(([label, s]) => (
+            <tr key={label}>
+              <th scope="row">{label}</th>
+              {cols.map(([h, f]) => (
+                <td key={h}>{f(s)}</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 

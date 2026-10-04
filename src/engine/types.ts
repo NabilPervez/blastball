@@ -70,11 +70,25 @@ export type GameEvent = EventBase & (
   | { kind: 'walk'; batterId: string; pitcherId: string }
   | { kind: 'strikeout'; batterId: string; pitcherId: string; swinging: boolean }
   | { kind: 'hit'; batterId: string; pitcherId: string; hit: HitKind }
-  | { kind: 'out'; batterId: string; pitcherId: string; out: OutKind; sacrifice: boolean }
+  | { kind: 'out'; batterId: string; pitcherId: string; out: OutKind; sacrifice: boolean; /** Engine v3+: who made the play. */ fielderId?: string }
   | { kind: 'run'; runnerId: string; teamId: string }
   | { kind: 'halfEnd' }
   | { kind: 'gameEnd'; winnerId: string; loserId: string }
+  // Engine v3 (Sprint 12). `cause` is reserved for environment events (Sprint 13).
+  | { kind: 'stealAttempt'; runnerId: string; from: 1 | 2; pitcherId: string; success: boolean; cause?: CauseRef }
+  | { kind: 'pickoff'; runnerId: string; base: 1 | 2; pitcherId: string; cause?: CauseRef }
+  | { kind: 'error'; fielderId: string; batterId: string; pitcherId: string; onKind: OutKind; bases: number; cause?: CauseRef }
+  | { kind: 'doublePlay'; batterId: string; pitcherId: string; runnerOutId: string; fielderId: string; cause?: CauseRef }
+  | { kind: 'wildPitch'; pitcherId: string; advanced: string[]; cause?: CauseRef }
+  | { kind: 'hitByPitch'; batterId: string; pitcherId: string; cause?: CauseRef }
 );
+
+/** Why an event happened differently than the engine first rolled (environment events, Sprint 13). */
+export interface CauseRef {
+  type: 'env';
+  id: string;
+  original: string;
+}
 
 export interface GameResult {
   gameId: string;

@@ -35,10 +35,10 @@ const describePick = (p: Player, kind: PickKind) =>
   kind === 'back'
     ? p.role === 'pitcher'
       ? `+${PICK_RATES.backStrikeout} per strikeout thrown`
-      : `+${PICK_RATES.backHit} per hit, +${PICK_RATES.backHomeRun} more per home run`
+      : `+${PICK_RATES.backHit} per hit, +${PICK_RATES.backHomeRun} more per home run, +${PICK_RATES.backSteal} per stolen base`
     : p.role === 'pitcher'
-      ? `+${PICK_RATES.fadeHitAllowed} per hit and +${PICK_RATES.fadeRunAllowed} per run allowed`
-      : `+${PICK_RATES.fadeStrikeout} per strikeout, +${PICK_RATES.fadeHitless} for a hitless game`;
+      ? `+${PICK_RATES.fadeHitAllowed} per hit, +${PICK_RATES.fadeRunAllowed} per run allowed, +${PICK_RATES.fadeWildPitch} per wild pitch`
+      : `+${PICK_RATES.fadeStrikeout} per strikeout, +${PICK_RATES.fadeHitless} for a hitless game, +${PICK_RATES.fadeCaught} if caught stealing or doubled up`;
 
 /** Back / Fade buttons for a player page. */
 export function PickButtons({ player }: { player: Player }) {

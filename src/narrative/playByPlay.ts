@@ -19,7 +19,7 @@ export interface GameRef {
 const ordinal = (n: number) => n + (['th', 'st', 'nd', 'rd'][n % 100 > 10 && n % 100 < 14 ? 0 : n % 10] ?? 'th');
 const BASE_NAMES = ['first', 'second', 'third', 'home'];
 
-/** Positions that field each kind of out (engine v1 doesn't name a fielder, so the text picks one). */
+/** Positions that field each kind of out, for engine v2 games (which don't name a fielder). */
 const FIELDERS: Record<OutKind, string[]> = {
   groundout: ['1B', '2B', '3B', 'SS', 'SS', '2B'],
   popout: ['C', '1B', '2B', '3B', 'SS'],
@@ -125,7 +125,9 @@ export function describeEvent(league: League, game: GameRef, events: GameEvent[]
   const modOf = (id: string | null) => (id && extras.modName?.(id)) || null;
 
   let fielder: string | null = null;
-  if (e.kind === 'out') {
+  if (e.kind === 'out' && e.fielderId) fielder = e.fielderId;
+  else if (e.kind === 'out') {
+    // Engine v2 games don't name a fielder, so the text picks one who could have made the play.
     const pos = createRng(league.seed, game.id, 'text-fielder', index).pick(FIELDERS[e.out]);
     const fielding = league.teams.find((x) => x.id === fieldingId);
     fielder = fielding?.lineup.find((id) => league.players[id]?.position === pos) ?? null;
@@ -153,8 +155,8 @@ export function describeEvent(league: League, game: GameRef, events: GameEvent[]
   };
 
   const text = (tpl?.text ?? '{b}.').replace(/\{(\w+)\}/g, (_, v: string) => vars[v] ?? '');
-  // Variables like {half} are lowercase, so capitalize wherever a sentence starts.
-  return text.replace(/(^|[.!?]\s+)([a-z])/g, (_, lead: string, c: string) => lead + c.toUpperCase());
+  // Variables like {half} are lowercase, so capitalize wherever a sentence starts (an ellipsis doesn't end one).
+  return text.replace(/(^|(?<!\.\.)[.!?]\s+)([a-z])/g, (_, lead: string, c: string) => lead + c.toUpperCase());
 }
 
 /** Events worth highlighting in the feed. */

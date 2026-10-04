@@ -9,10 +9,10 @@ export const RATING_HELP: Record<RatingKey, { label: string; who: string; text: 
   power: { label: 'Power', who: 'Batters', text: 'When they get a hit, how often it’s a home run or a double instead of a single.' },
   discipline: { label: 'Discipline', who: 'Batters', text: 'Lays off bad pitches, so more balls and more walks (against the pitcher’s Control).' },
   velocity: { label: 'Velocity', who: 'Pitchers (and fielders’ arms)', text: 'Pitching: fewer of the batter’s balls in play fall for hits. On a batter it’s their throwing arm: every 5 points above 50 adds 1 to their Defense in the field.' },
-  control: { label: 'Control', who: 'Pitchers (and batters’ eyes)', text: 'Pitching: throws strikes, so fewer walks. On a batter it’s their eye: every 5 points above 50 adds 1 to Discipline.' },
-  stuff: { label: 'Stuff', who: 'Pitchers (and batters’ bats)', text: 'Pitching: more swings and misses, so more strikeouts. On a batter it’s bat wizardry: every 5 points above 50 adds 1 to Power.' },
-  speed: { label: 'Speed', who: 'Batters', text: 'Takes the extra base on hits, scores from third on fly balls and ground outs, and hits more triples.' },
-  defense: { label: 'Defense', who: 'The nine batters', text: 'The lineup’s average Defense turns balls in play into outs. Pitchers’ Defense doesn’t count.' },
+  control: { label: 'Control', who: 'Pitchers (and batters’ eyes)', text: 'Pitching: throws strikes, so fewer walks, fewer wild pitches and hit batters, and it holds runners (fewer steals, more pickoffs). On a batter it’s their eye: every 5 points above 50 adds 1 to Discipline.' },
+  stuff: { label: 'Stuff', who: 'Pitchers (and batters’ bats)', text: 'Pitching: more swings and misses, so more strikeouts (and slightly more wild pitches). On a batter it’s bat wizardry: every 5 points above 50 adds 1 to Power.' },
+  speed: { label: 'Speed', who: 'Batters', text: 'Takes the extra base on hits, scores from third on fly balls and ground outs, and hits more triples. Fast runners steal more often and more successfully, are harder to pick off, and beat out more double plays.' },
+  defense: { label: 'Defense', who: 'The nine batters', text: 'The lineup’s average Defense turns balls in play into outs and turns more double plays. Each fielder’s own Defense (plus arm) decides how often they make an error, and the catcher’s throws out base stealers. Pitchers’ Defense doesn’t count.' },
 };
 
 export const GROUP_HELP: Record<StarGroup, string> = {

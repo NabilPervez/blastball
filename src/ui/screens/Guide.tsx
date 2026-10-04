@@ -143,6 +143,10 @@ export function Guide() {
           <strong>Now playing</strong>: games you start (open one, or press <em>Play all</em> on Games) play live in a bar at the top of every screen. It shows the score, inning, bases, outs and the latest play. In Manual mode nothing starts on its own. In Living mode every game starts together at <em>first pitch</em> (25% into the day by default — change it in Settings); come back later and they'll be exactly as far along as the clock says. Tap it to watch the full feed, or pause it with ❚❚.
         </p>
         <p>Open any of today's games to watch it pitch by pitch, with a scoreboard, the bases, the count and outs. Choose Live, 2× or 5× speed, pause, or jump to the final with Instant.</p>
+        <p>
+          Beyond hits, walks and outs, games have <strong>stolen bases</strong> (and runners caught stealing), <strong>pickoffs</strong>, <strong>errors</strong>, <strong>double plays</strong>, <strong>wild pitches</strong> and batters <strong>hit by pitches</strong>. Player stats track them: SB, CS, GIDP, HBP and E for hitters, WP and HBP for pitchers. League leaders include stolen bases and fielding (fewest errors per game).
+        </p>
+        <p className="small muted">Leagues started before this update keep their current season exactly as it was and gain these plays from their next season.</p>
         <p>Play-by-play is kept for the last 7 days. <strong>Pin</strong> a finished game to keep its feed forever — find pinned games in History.</p>
         <p className="muted small">Opening a game counts as starting it: bets on that game close.</p>
       </Section>
@@ -182,10 +186,10 @@ export function Guide() {
           <strong>Player picks</strong>: open any player and choose ▲ <em>Back</em> or ▼ <em>Fade</em>. You can back up to {MAX_BACKED} players and fade up to {MAX_FADED}. After every game:
         </p>
         <ul className="guide-list">
-          <li>Backed hitter: +{PICK_RATES.backHit} per hit and +{PICK_RATES.backHomeRun} more per home run.</li>
+          <li>Backed hitter: +{PICK_RATES.backHit} per hit, +{PICK_RATES.backHomeRun} more per home run, and +{PICK_RATES.backSteal} per stolen base.</li>
           <li>Backed pitcher: +{PICK_RATES.backStrikeout} per strikeout thrown.</li>
-          <li>Faded hitter: +{PICK_RATES.fadeStrikeout} per strikeout, +{PICK_RATES.fadeHitless} for a hitless game (3+ at-bats).</li>
-          <li>Faded pitcher: +{PICK_RATES.fadeHitAllowed} per hit and +{PICK_RATES.fadeRunAllowed} per run allowed.</li>
+          <li>Faded hitter: +{PICK_RATES.fadeStrikeout} per strikeout, +{PICK_RATES.fadeHitless} for a hitless game (3+ at-bats), and +{PICK_RATES.fadeCaught} each time they're caught stealing, picked off, or ground into a double play.</li>
+          <li>Faded pitcher: +{PICK_RATES.fadeHitAllowed} per hit, +{PICK_RATES.fadeRunAllowed} per run allowed, and +{PICK_RATES.fadeWildPitch} per wild pitch.</li>
         </ul>
         <p className="muted small">Your picks and what they've earned this season are on Today. The League tab's leaderboards show who's hot — hitters and pitchers ranked separately.</p>
       </Section>

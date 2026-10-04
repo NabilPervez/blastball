@@ -2252,6 +2252,33 @@
       "when": {
         "risp": true
       }
+    },
+    {
+      "id": "wildPitch-risp-v3-1",
+      "on": "wildPitch",
+      "weight": 2,
+      "text": "{p} bounces one in the dirt and it skips away. The runners move up.",
+      "when": {
+        "risp": true
+      }
+    },
+    {
+      "id": "wildPitch-risp-v3-2",
+      "on": "wildPitch",
+      "weight": 2,
+      "text": "It gets past the catcher! Wild pitch, and every runner takes a base.",
+      "when": {
+        "risp": true
+      }
+    },
+    {
+      "id": "wildPitch-risp-v3-3",
+      "on": "wildPitch",
+      "weight": 2,
+      "text": "{p} loses the grip. Wild pitch, runners advance into scoring position or beyond.",
+      "when": {
+        "risp": true
+      }
     }
   ],
   "story": [
