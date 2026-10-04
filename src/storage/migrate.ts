@@ -1,4 +1,5 @@
 import { fullLine, type StatLine } from '../engine/boxScore';
+import { assignClimates } from '../world/environment';
 import { createFactions } from '../world/factions';
 import { initialAge, initialExperience } from '../world/seasons';
 import { createStadiums } from '../world/weird';
@@ -121,6 +122,16 @@ export const migrations: Record<number, Migration> = {
       careerStats: fill(save.careerStats as Record<string, Partial<StatLine>>),
       statsBySeason: Object.fromEntries(Object.entries(bySeason).map(([season, lines]) => [season, fill(lines)])),
     };
+  },
+  // v11 → v12 (Sprint 13): stadium climates, assigned exactly as a new stadium would get them
+  // (a rebuilt stadium uses its rebuild seed). Environment events start with engine v4, next season.
+  11: (save) => {
+    const seed = (save.settings as { seed: string }).seed;
+    const weird = save.weird as { stadiums: Record<string, { rebuilt?: number; climates?: string[] }> };
+    const stadiums = Object.fromEntries(
+      Object.entries(weird.stadiums).map(([teamId, st]) => [teamId, { ...st, climates: st.climates ?? assignClimates(st.rebuilt ? `${seed}:${st.rebuilt}` : seed, teamId) }]),
+    );
+    return { ...save, weird: { ...weird, stadiums } };
   },
 };
 

@@ -2,7 +2,7 @@ import { addLines, boxScore, emptyLine, type BoxScore, type StatLine } from '../
 import { ENGINE_VERSION, simulateGame } from '../engine/game';
 import { oddsForGame } from '../engine/odds';
 import { computeStandings, generateSchedule } from '../engine/season';
-import type { GameEvent, League, ScheduledGame } from '../engine/types';
+import type { GameEnvironment, GameEvent, League, ScheduledGame } from '../engine/types';
 import type { Clock, DayLengthMinutes } from './clock';
 import { applyEffect, marginalCost, openElection, playerVoteTotal, tally, winnerOf, type Election } from './elections';
 import { createFactions, type Faction } from './factions';
@@ -14,7 +14,8 @@ import { advancePlayoffs, ageRatingOffset, initialAge, initialExperience, isPlay
 import { createRng } from '../engine/rng';
 import { relegate } from './relegation';
 import { isRivalry, recordWithWin, RIVALRY_BONUS, stadiumPerk, teamPerk, type HeadToHead } from './teams';
-import { agingTraits, applyHappening, birthTraits, createStadiums, DEFAULT_PACKS, effectiveLeague, expireMods, mergePacks, resurrect, rollDay, type WeirdHappening, type WeirdState } from './weird';
+import { gameEnvironment } from './environment';
+import { agingTraits, applyHappening, isActiveMod, birthTraits, createStadiums, DEFAULT_PACKS, effectiveLeague, expireMods, mergePacks, resurrect, rollDay, type WeirdHappening, type WeirdState } from './weird';
 
 /** The active rule packs (data-driven weirdness). */
 export const RULES = mergePacks(DEFAULT_PACKS);
@@ -24,7 +25,7 @@ export const RULES = mergePacks(DEFAULT_PACKS);
  * `reduce(state, event)`, so the same events always produce the same state.
  */
 
-export const SAVE_VERSION = 11;
+export const SAVE_VERSION = 12;
 
 /** Out of coins with nothing riding? The league office tops you back up (once a day). */
 export const BAILOUT_COINS = 100;
@@ -380,6 +381,13 @@ function withTeamIdentity(s: UniverseState, league: League, game: ScheduledGame)
     }
   }
   return { ...league, players };
+}
+
+/** The home stadium's environment for a game: its climates, active stadium mods, and the chaos level. */
+export function stadiumEnvironment(s: UniverseState, game: ScheduledGame): GameEnvironment {
+  const st = s.weird.stadiums[game.homeId];
+  const mods = (st?.mods ?? []).filter((m) => isActiveMod(m, s.season, game.day)).map((m) => m.id);
+  return gameEnvironment(st?.climates ?? [], mods, s.settings.chaos);
 }
 
 export const gameLeague = (s: UniverseState, game: ScheduledGame) =>
@@ -799,7 +807,7 @@ export function runCommand(start: UniverseState, cmd: Command): CommandResult {
 
   const play = (game: ScheduledGame) => {
     if (state.results[game.id]) return;
-    const result = simulateGame(gameLeague(state, game), game, state.season, state.engineVersion);
+    const result = simulateGame(gameLeague(state, game), game, state.season, state.engineVersion, stadiumEnvironment(state, game));
     apply({
       type: 'gamePlayed',
       summary: {
@@ -856,7 +864,7 @@ export function runCommand(start: UniverseState, cmd: Command): CommandResult {
 /** Recreate a game's play-by-play from its seed (works for any game, since the sim is deterministic). */
 export function replayGame(state: UniverseState, gameId: string): GameEvent[] {
   const game = state.schedule.find((g) => g.id === gameId)!;
-  return simulateGame(gameLeague(state, game), game, state.season, state.engineVersion).events;
+  return simulateGame(gameLeague(state, game), game, state.season, state.engineVersion, stadiumEnvironment(state, game)).events;
 }
 
 const rollInput = (s: UniverseState) => ({
@@ -873,15 +881,29 @@ const rollInput = (s: UniverseState) => ({
 export function prophecy(s: UniverseState): string | null {
   if (s.persona?.kind !== 'prophet' || isSeasonOver(s)) return null;
   const happenings = rollDay(rollInput(s), RULES);
-  if (!happenings.length) return 'The air is still. Nothing strange is gathering tonight.';
-  return happenings
+  const weather = s.engineVersion >= 4 ? forecastLine(s) : '';
+  if (!happenings.length) return `The air is still. Nothing strange is gathering tonight.${weather}`;
+  return (
+    happenings
     .map((h) => {
       const t = s.league.teams.find((x) => x.id === h.teamId)!;
       return h.eventId === 'death'
         ? `A cold wind blows through the ${t.city} ${t.name} dugout. Someone may not see tomorrow.`
         : `Something strange is gathering around the ${t.city} ${t.name} tonight.`;
     })
-    .join(' ');
+    .join(' ') + weather
+  );
+}
+
+/** The Prophet's weather sense: what could stir at today's stadiums (possibilities, not the roll). */
+function forecastLine(s: UniverseState): string {
+  const parts = unplayedToday(s).flatMap((g) => {
+    const env = stadiumEnvironment(s, g);
+    if (!env.events.length) return [];
+    const names = env.events.slice(0, 3).map((e) => e.name.toLowerCase());
+    return [`${s.weird.stadiums[g.homeId]?.name ?? 'a stadium'}: ${names.join(', ')}`];
+  });
+  return parts.length ? ` The skies whisper of ${parts.join('; ')}.` : '';
 }
 
 // ---------------------------------------------------------------------------

@@ -162,8 +162,10 @@ describe('save fixtures', () => {
     const { migrateSave } = await import('../src/storage/migrate');
     const raw = (await import('./fixtures/save-v4.json')).default;
     const u = migrateSave(structuredClone(raw));
-    // Same weirdness, plus born-with traits added in v10.
-    expect({ ...u.weird, playerMods: undefined }).toEqual({ ...raw.weird, playerMods: undefined });
+    // Same weirdness, plus born-with traits added in v10 and stadium climates added in v12.
+    const noClimates = (st: Record<string, object>) => Object.fromEntries(Object.entries(st).map(([id, x]) => [id, { ...x, climates: undefined }]));
+    expect({ ...u.weird, playerMods: undefined, stadiums: noClimates(u.weird.stadiums) }).toEqual({ ...raw.weird, playerMods: undefined, stadiums: noClimates(raw.weird.stadiums) });
+    for (const st of Object.values(u.weird.stadiums)) expect(st.climates.length).toBeGreaterThan(0);
     for (const [id, mods] of Object.entries(raw.weird.playerMods)) expect(u.weird.playerMods[id]).toEqual(expect.arrayContaining(mods as object[]));
     expect(u.settings.dayLengthMinutes).toBe(60);
     expect(u.clock).toBeNull();

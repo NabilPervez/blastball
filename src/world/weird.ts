@@ -1,6 +1,7 @@
 import corePack from '../../content/weird/core.json';
 import { createRng } from '../engine/rng';
 import type { League, Player, RatingKey, ScheduledGame } from '../engine/types';
+import { assignClimates } from './environment';
 import { makeRookie } from './generate';
 
 /**
@@ -157,6 +158,8 @@ export interface Stadium {
   /** Season the stadium was rebuilt for a new franchise (after relegation). */
   rebuilt?: number;
   mods: ActiveMod[];
+  /** 1–2 climate tags (Sprint 13); decide which environment events can happen here. Public. */
+  climates: string[];
 }
 
 export interface Departure {
@@ -182,7 +185,7 @@ export function createStadiums(seed: string, league: League): Record<string, Sta
   return Object.fromEntries(
     league.teams.map((t) => {
       const rng = createRng(seed, 'stadium', t.id);
-      return [t.id, { name: `${rng.pick(STADIUM_PREFIXES)} ${t.city} ${rng.pick(STADIUM_SUFFIXES)}`, mods: [] }];
+      return [t.id, { name: `${rng.pick(STADIUM_PREFIXES)} ${t.city} ${rng.pick(STADIUM_SUFFIXES)}`, mods: [], climates: assignClimates(seed, t.id) }];
     }),
   );
 }

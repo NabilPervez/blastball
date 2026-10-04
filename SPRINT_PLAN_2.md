@@ -98,13 +98,22 @@ Everything in Plan 1's Universal DoD still applies (tests green, lint clean incl
 
 **Definition of Done — Sprint 13**
 - [ ] Universal DoD met.
-- [ ] Determinism test: same seed ⇒ same env events and same changed plays.
-- [ ] Isolation test: with environment disabled, games match S12 output exactly (env uses its own stream).
-- [ ] Frequency test over 500 games: Calm < 15%, Normal 30–40%, Unhinged > 70% of games with an effective event.
-- [ ] Every changed play has an attributed effect line in the log; test asserts no `cause` without text.
-- [ ] Climate gating test: an event never fires at a stadium without a matching climate or required stadium mod.
-- [ ] Migration v11 → v12 fixture test.
-- [ ] Prophet hints include environment where applicable.
+- [x] Determinism test: same seed ⇒ same env events and same changed plays.
+- [x] Isolation test: with environment disabled, games match S12 output exactly (env uses its own stream). Checked against 100 games fingerprinted from the shipped Sprint 12 engine.
+- [x] Frequency test over 500 games: Calm < 15%, Normal 30–40%, Unhinged > 70% of games with an effective event (measured over 528 games each: 12% / 36% / 73%).
+- [x] Every changed play has an attributed effect line in the log; test asserts no `cause` without text.
+- [x] Climate gating test: an event never fires at a stadium without a matching climate or required stadium mod.
+- [x] Migration v11 → v12 fixture test.
+- [x] Prophet hints include environment where applicable.
+
+**Sprint 13 notes**
+- **Engine v4.** Leagues created after the Sprint 12 push are on v3 mid-season, so the environment can't switch on for them until their next season. Same rule as Sprint 12: `ENGINE_VERSION = 4`, and v3 is v4 with the environment off.
+- **How it runs.** At the start of each plate appearance a per-PA stream `createRng(gameSeed…, 'env', paIndex)` may start one eligible event (at most one per half-inning). The event fires at its phase only where it would change something, then is spent (`maxEffects`, default 1). The pitch is rolled with exactly v3's calls before the environment can force a ball or strike, which keeps the main stream identical.
+- **Calibration.** The content's per-PA chances started far too many events (48% of games affected at Normal), so a single scale, `ENV_CHANCE_SCALE = 640` per mille in `world/environment.ts`, brings it to the targets. Frequency rises a little later in a season as stadium mods appear (some events need one).
+- **Effect details the PRD left open:** an upgraded hit goes up one step (a triple becomes a home run); a downgraded home run becomes a double; `extraRun` scores the lead runner; `runnerHome` needs a runner on third; `runnersAdvance` also exists as an afterPlay effect (Funnel Cloud uses it). Event texts may use `{stadium} {b} {p} {r} {f} {t}`, filled from the play they changed.
+- **Where it shows:** the play-by-play (announce, changed play, attributed effect line, fizzle), the "Environment: …" footer under a finished game (there is no separate box score screen yet), climates and possible events on the team's stadium card, the Prophet's hint, and the Guide.
+- **Not done (P1):** forecast UI for everyone, "the weather won it" digest headline, the ≤ 2% odds climate adjustment.
+- **Perf:** 7-day catch-up, 16 teams, Unhinged: 59 ms in Node.
 
 ---
 
@@ -217,7 +226,7 @@ Everything in Plan 1's Universal DoD still applies (tests green, lint clean incl
 |---|---|
 | 11 — Narrative v2 | ✅ Done (except Nabil's read-aloud spot check) — play-by-play from `content/narrative/templates.json`, pure context builder, weighted-specificity selection, per-game no-repeat, validator. Notes below. |
 | 12 — Engine v2 | ✅ Done — engine v3 in code (see notes), frozen v2 engine, six new events in band, new stats/leaders/pick lines, save v11. |
-| 13 — Environment events | Not started |
+| 13 — Environment events | ✅ Done — engine v4, climates, 32 events / 15 effect types, attributed two-line log, footer, stadium page, Prophet forecast, save v12. P1 forecast UI / digest headline / odds tweak not done. |
 | 14 — Streaks & personas | Not started. Open Question 1 answered (see notes). |
 | 15 — Achievements | Not started (needs Commissioner flag or stub) |
 | 16 — Binder & stories | Not started |

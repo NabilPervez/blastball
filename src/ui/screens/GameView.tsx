@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { GameEvent } from '../../engine/types';
 import { describeEvent, isBigMoment } from '../../narrative/playByPlay';
 import { narrativeExtras } from '../../narrative/fromUniverse';
+import { envFooter } from '../../world/environment';
 import { BaseDiamond, Outs, TeamBadge } from '../components/bits';
 import { useGame } from '../store';
 import { isPinned, setPinned } from '../../storage/db';
@@ -174,6 +175,7 @@ export function GameView({ gameId }: { gameId: string }) {
           </li>
         ))}
       </ol>
+      {done && envFooter(events) && <p className="env-footer small muted">{envFooter(events)}</p>}
     </section>
   );
 }

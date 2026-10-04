@@ -1,5 +1,6 @@
 import { createRng } from '../engine/rng';
 import type { GameEvent, League, OutKind } from '../engine/types';
+import { envEventDef } from '../world/environment';
 import { buildContext, type NarrativeExtras } from './context';
 import { PLAY_TEMPLATES, type NarrativeContext, type PlayTemplate, type TemplateKind } from './templates';
 
@@ -77,6 +78,7 @@ function lastId(events: GameEvent[], index: number, key: 'batterId' | 'pitcherId
 function chooseTemplate(league: League, game: GameRef, events: GameEvent[], index: number, extras: NarrativeExtras, used: ReadonlySet<string>): PlayTemplate | null {
   const rng = createRng(league.seed, game.id, 'text', index);
   const kind = templateKind(events[index]);
+  if (!PLAY_TEMPLATES[kind]) return null; // environment lines come from the environment content
   const ctx = buildContext(events, index, game, extras);
   // Mods and the favorite team are common, so on routine plays their flavor lines appear only
   // about 1 time in 4; otherwise they'd repeat every at-bat.
@@ -108,8 +110,11 @@ export function templateFor(league: League, game: GameRef, events: GameEvent[], 
 }
 
 export function describeEvent(league: League, game: GameRef, events: GameEvent[], index: number, extras: NarrativeExtras = {}): string {
-  const e = events[index];
-  const tpl = templateFor(league, game, events, index, extras);
+  const here = events[index];
+  // An effect line that follows a changed play talks about that play's people.
+  const src = here.kind === 'envEffect' && !here.cause && index > 0 ? index - 1 : index;
+  const e = events[src];
+  const tpl = here.kind === 'envStart' || here.kind === 'envEffect' || here.kind === 'envEnd' ? null : templateFor(league, game, events, index, extras);
 
   const name = (id: string | null) => (id ? league.players[id]?.name : null) ?? 'Someone';
   const team = (id: string) => {
@@ -120,15 +125,15 @@ export function describeEvent(league: League, game: GameRef, events: GameEvent[]
   const fieldingId = e.half === 'top' ? game.homeId : game.awayId;
   const t = e.kind === 'gameEnd' ? e.winnerId : e.kind === 'halfStart' ? e.battingTeamId : battingId;
   const opp = e.kind === 'gameEnd' ? e.loserId : t === game.awayId ? game.homeId : game.awayId;
-  const batterId = lastId(events, index, 'batterId');
-  const pitcherId = e.kind === 'gameStart' ? e.awayPitcherId : lastId(events, index, 'pitcherId');
+  const batterId = lastId(events, src, 'batterId');
+  const pitcherId = e.kind === 'gameStart' ? e.awayPitcherId : lastId(events, src, 'pitcherId');
   const modOf = (id: string | null) => (id && extras.modName?.(id)) || null;
 
   let fielder: string | null = null;
   if (e.kind === 'out' && e.fielderId) fielder = e.fielderId;
   else if (e.kind === 'out') {
     // Engine v2 games don't name a fielder, so the text picks one who could have made the play.
-    const pos = createRng(league.seed, game.id, 'text-fielder', index).pick(FIELDERS[e.out]);
+    const pos = createRng(league.seed, game.id, 'text-fielder', src).pick(FIELDERS[e.out]);
     const fielding = league.teams.find((x) => x.id === fieldingId);
     fielder = fielding?.lineup.find((id) => league.players[id]?.position === pos) ?? null;
   } else if ('fielderId' in e) fielder = (e as { fielderId: string }).fielderId;
@@ -139,13 +144,13 @@ export function describeEvent(league: League, game: GameRef, events: GameEvent[]
     b: name(batterId),
     p: name(pitcherId),
     p2: e.kind === 'gameStart' ? name(e.homePitcherId) : '',
-    r: name('runnerId' in e ? (e as { runnerId: string }).runnerId : null),
+    r: name(here.kind === 'envEffect' && (here.removedId || here.advanced?.length) ? (here.removedId ?? here.advanced![0]) : 'runnerId' in e ? (e as { runnerId: string }).runnerId : null),
     f: fielder ? name(fielder) : 'the fielder',
     t: team(t),
     opp: team(opp),
     stadium: extras.stadium ?? 'the ballpark',
     mod: modOf(batterId) ?? modOf(pitcherId) ?? '',
-    env: '',
+    env: e.cause ? `the ${envEventDef(e.cause.id)?.name.toLowerCase() ?? 'weather'}` : '',
     n: '',
     score: e.kind === 'gameEnd' ? `${hi}-${lo}` : `${e.score.away}-${e.score.home}`,
     count: `${e.balls}-${e.strikes}`,
@@ -154,12 +159,21 @@ export function describeEvent(league: League, game: GameRef, events: GameEvent[]
     base: 'from' in e ? BASE_NAMES[(e as { from: number }).from] : '',
   };
 
-  const text = (tpl?.text ?? '{b}.').replace(/\{(\w+)\}/g, (_, v: string) => vars[v] ?? '');
+  const envDef = 'envId' in here ? envEventDef(here.envId) : undefined;
+  const envText = !envDef
+    ? null
+    : here.kind === 'envStart'
+      ? `${envDef.icon} ${envDef.name}: ${envDef.announce}`
+      : here.kind === 'envEnd'
+        ? `${envDef.icon} ${envDef.fizzle ?? `The ${envDef.name.toLowerCase()} passes.`}`
+        : `${envDef.icon} ${envDef.effectText}`;
+
+  const text = (envText ?? tpl?.text ?? '{b}.').replace(/\{(\w+)\}/g, (_, v: string) => vars[v] ?? '');
   // Variables like {half} are lowercase, so capitalize wherever a sentence starts (an ellipsis doesn't end one).
   return text.replace(/(^|(?<!\.\.)[.!?]\s+)([a-z])/g, (_, lead: string, c: string) => lead + c.toUpperCase());
 }
 
 /** Events worth highlighting in the feed. */
 export function isBigMoment(e: GameEvent): boolean {
-  return e.kind === 'run' || e.kind === 'gameEnd' || (e.kind === 'hit' && e.hit === 'homeRun');
+  return e.kind === 'run' || e.kind === 'gameEnd' || e.kind === 'envEffect' || (e.kind === 'hit' && e.hit === 'homeRun');
 }

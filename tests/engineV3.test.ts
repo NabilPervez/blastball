@@ -23,8 +23,8 @@ describe('engine v3: frozen v2 and old saves', () => {
 
   it('a v10 save migrates to v11 and keeps its engine', () => {
     const u = migrateSave(structuredClone(v10));
-    expect(SAVE_VERSION).toBe(11);
-    expect(u.saveVersion).toBe(11);
+    expect(SAVE_VERSION).toBeGreaterThanOrEqual(11);
+    expect(u.saveVersion).toBe(SAVE_VERSION);
     expect(u.engineVersion).toBe(2);
     for (const line of Object.values(u.seasonStats)) expect(line).toEqual(fullLine(line));
     expect(Object.values(u.seasonStats).every((l) => l.sb === 0 && l.e === 0 && l.wp === 0)).toBe(true);

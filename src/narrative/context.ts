@@ -22,7 +22,7 @@ const PA_RESULTS = new Set(['walk', 'strikeout', 'hit', 'out', 'error', 'doubleP
 /** Runs that score as part of the play at `index` (the engine emits them right after it). */
 export function runsOnPlay(events: GameEvent[], index: number): number {
   let n = 0;
-  for (let i = index + 1; i < events.length && events[i].kind === 'run'; i++) n++;
+  for (let i = index + 1; i < events.length && (events[i].kind === 'run' || events[i].kind === 'envEffect'); i++) if (events[i].kind === 'run') n++;
   return n;
 }
 
@@ -84,7 +84,7 @@ export function buildContext(events: GameEvent[], index: number, sides: GameSide
     basesLoaded: onBase === 3,
     risp: !!(bases[1] || bases[2]),
     favorite,
-    env: false, // set by environment events (Sprint 13)
+    env: !!e.cause,
     swinging: e.kind === 'strikeout' ? e.swinging : null,
     sacrifice: e.kind === 'out' ? e.sacrifice : null,
     success: 'success' in e ? (e as { success: boolean }).success : null,

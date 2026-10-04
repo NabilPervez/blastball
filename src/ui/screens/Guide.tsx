@@ -6,6 +6,7 @@ import { FACTION_BUDGET } from '../../world/factions';
 import { DIEHARD_BONUS_PCT, GAMBLER_UNDERDOG_PCT, PERSONAS, type PersonaKind } from '../../world/persona';
 import { FINAL_BEST_OF, SEMIS_BEST_OF } from '../../world/seasons';
 import { MAX_BACKED, MAX_FADED, PICK_RATES } from '../../world/picks';
+import { ENVIRONMENT } from '../../world/environment';
 import { BAILOUT_COINS, DAILY_STIPEND, FAVORITE_WIN_BONUS, PATRON_BLESSING, PATRON_COST, PATRON_FROM_SEASON, RULES, STARTING_COINS } from '../../world/universe';
 import { BACKUP_EVERY_DAYS } from '../components/TimeBits';
 import { useGame } from '../store';
@@ -235,6 +236,9 @@ export function Guide() {
           </li>
           <li>
             <strong>Stadium effects</strong>: {RULES.stadiumMods.map((m) => `${m.icon} ${m.name}`).join(', ')}. See them on a team's page.
+          </li>
+          <li>
+            <strong>Climates and environment events</strong>: every stadium has one or two climates ({ENVIRONMENT.climates.map((c) => `${c.icon} ${c.name}`).join(', ')}), shown on its team page. During a game the climate can stir up an event, at most one per half-inning, that changes a real play: a crosswind turns a flyout into a double, a ghost whispers ball four. The play-by-play names the cause on the next line, and a finished game lists what changed. Higher chaos means more of them, and some only happen with a stadium effect (a funnel cloud needs Tornado Alley). Events are never known before the game, only what <em>could</em> happen. Leagues started before this update get them from their next season.
           </li>
           <li>
             <strong>Breakthroughs and slumps</strong> permanently nudge players' ratings.

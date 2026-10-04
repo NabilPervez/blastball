@@ -60,6 +60,8 @@ interface EventBase {
   strikes: number;
   bases: Bases;
   score: { away: number; home: number };
+  /** Set when an environment event changed this play (engine v4+). */
+  cause?: CauseRef;
 }
 
 export type GameEvent = EventBase & (
@@ -74,14 +76,49 @@ export type GameEvent = EventBase & (
   | { kind: 'run'; runnerId: string; teamId: string }
   | { kind: 'halfEnd' }
   | { kind: 'gameEnd'; winnerId: string; loserId: string }
-  // Engine v3 (Sprint 12). `cause` is reserved for environment events (Sprint 13).
-  | { kind: 'stealAttempt'; runnerId: string; from: 1 | 2; pitcherId: string; success: boolean; cause?: CauseRef }
-  | { kind: 'pickoff'; runnerId: string; base: 1 | 2; pitcherId: string; cause?: CauseRef }
-  | { kind: 'error'; fielderId: string; batterId: string; pitcherId: string; onKind: OutKind; bases: number; cause?: CauseRef }
-  | { kind: 'doublePlay'; batterId: string; pitcherId: string; runnerOutId: string; fielderId: string; cause?: CauseRef }
-  | { kind: 'wildPitch'; pitcherId: string; advanced: string[]; cause?: CauseRef }
-  | { kind: 'hitByPitch'; batterId: string; pitcherId: string; cause?: CauseRef }
+  // Engine v3 (Sprint 12).
+  | { kind: 'stealAttempt'; runnerId: string; from: 1 | 2; pitcherId: string; success: boolean }
+  | { kind: 'pickoff'; runnerId: string; base: 1 | 2; pitcherId: string }
+  | { kind: 'error'; fielderId: string; batterId: string; pitcherId: string; onKind: OutKind; bases: number }
+  | { kind: 'doublePlay'; batterId: string; pitcherId: string; runnerOutId: string; fielderId: string }
+  | { kind: 'wildPitch'; pitcherId: string; advanced: string[] }
+  | { kind: 'hitByPitch'; batterId: string; pitcherId: string }
+  // Engine v4 (Sprint 13): stadium environment events. A changed play carries `cause` and is
+  // followed by an envEffect line; effects that aren't a play (a runner sent home) are the envEffect itself.
+  | { kind: 'envStart'; envId: string }
+  | { kind: 'envEffect'; envId: string; changed: string; advanced?: string[]; removedId?: string }
+  | { kind: 'envEnd'; envId: string }
 );
+
+export type EnvPhase = 'prePitch' | 'onContact' | 'afterPlay';
+export type EnvEffectType =
+  | 'forceBall' | 'forceStrike' | 'wildPitch' | 'runnersAdvance' | 'pickoff'
+  | 'upgradeHit' | 'downgradeHit' | 'outToHit' | 'hitToOut' | 'induceError' | 'homeRunToOut' | 'outToHomeRun'
+  | 'extraRun' | 'runnerHome' | 'runnerRemoved';
+
+/** What the engine needs to know about one environment event (the full definition lives in content). */
+export interface EnvEventDef {
+  id: string;
+  name: string;
+  icon: string;
+  /** Per mille, each plate appearance, before chaos scaling. */
+  chancePerMille: number;
+  phase: EnvPhase;
+  effect: { type: EnvEffectType; from?: string[]; to?: string; chancePerMille: number };
+  /** Effects before it's spent (default 1). */
+  maxEffects?: number;
+  /** Plate appearances it lasts (default: the rest of the half-inning). */
+  durationPA?: number;
+  announce: string;
+  effectText: string;
+  fizzle?: string;
+}
+
+/** The events that can happen in one game, and the chaos multiplier (×1000). */
+export interface GameEnvironment {
+  events: EnvEventDef[];
+  chaosPerMille: number;
+}
 
 /** Why an event happened differently than the engine first rolled (environment events, Sprint 13). */
 export interface CauseRef {

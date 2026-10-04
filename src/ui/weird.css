@@ -20,3 +20,8 @@
 .prophecy p { margin: 0 0 4px; }
 .departed-note { color: var(--muted); font-style: italic; border-left: 3px solid var(--muted); padding-left: 10px; }
 .team-tile > span { min-width: 0; overflow-wrap: anywhere; }
+
+/* Stadium climates and the environment line under a finished game (Sprint 13). */
+.climates { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; }
+.env-footer { margin: 10px 0 0; }
+.feed-item.k-envStart, .feed-item.k-envEnd { font-style: italic; }

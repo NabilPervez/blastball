@@ -1,12 +1,13 @@
 import { createRng, type Rng } from './rng';
-import type { Bases, GameEvent, GameResult, Half, HitKind, League, OutKind, Player, ScheduledGame, Team } from './types';
+import type { Bases, CauseRef, EnvEventDef, GameEnvironment, GameEvent, GameResult, Half, HitKind, League, OutKind, Player, ScheduledGame, Team } from './types';
 import { simulateGameV2 } from './v2/game';
 
 /**
  * Bump when a change would alter simulated outcomes for the same seed.
  * v3 (Sprint 12, "engine v2" in PRD 2): steals, pickoffs, errors, double plays, wild pitches, hit by pitch.
+ * v4 (Sprint 13): stadium environment events. v3 is v4 with the environment switched off.
  */
-export const ENGINE_VERSION = 3;
+export const ENGINE_VERSION = 4;
 
 const MAX_INNINGS = 30; // safety valve; extra-inning ghost runners make this practically unreachable
 
@@ -74,12 +75,20 @@ type EmitPayload = { kind: GameEvent['kind'] } & Record<string, unknown>;
  * Simulate a game. `engineVersion` is the universe's: seasons started before Sprint 12 keep the
  * frozen v2 engine until their next season, so results never change mid-season.
  */
-export function simulateGame(league: League, game: ScheduledGame, seasonId = 1, engineVersion = ENGINE_VERSION): GameResult {
+export function simulateGame(league: League, game: ScheduledGame, seasonId = 1, engineVersion = ENGINE_VERSION, env?: GameEnvironment): GameResult {
   if (engineVersion <= 2) return simulateGameV2(league, game, seasonId);
-  return simulateGameV3(league, game, seasonId);
+  return simulateModern(league, game, seasonId, engineVersion >= 4 && env?.events.length ? env : null);
 }
 
-function simulateGameV3(league: League, game: ScheduledGame, seasonId: number): GameResult {
+const HIT_UP: Record<HitKind, HitKind> = { single: 'double', double: 'triple', triple: 'homeRun', homeRun: 'homeRun' };
+const HIT_DOWN: Record<HitKind, HitKind> = { single: 'single', double: 'single', triple: 'double', homeRun: 'double' };
+const isHitKind = (k: string | undefined): k is HitKind => !!k && k in HIT_UP;
+
+type PitchKind = 'ball' | 'called' | 'swinging' | 'foul' | 'inPlay';
+const PITCH_NAMES: Record<PitchKind, string> = { ball: 'ball', called: 'called strike', swinging: 'swinging strike', foul: 'foul', inPlay: 'ball in play' };
+
+/** Engines v3 and v4. With `env` null this is exactly v3: the environment has its own RNG stream. */
+function simulateModern(league: League, game: ScheduledGame, seasonId: number, env: GameEnvironment | null): GameResult {
   const rng: Rng = createRng(...gameSeed(league.seed, seasonId, game.id));
   const away = league.teams.find((t) => t.id === game.awayId)!;
   const home = league.teams.find((t) => t.id === game.homeId)!;
@@ -104,6 +113,13 @@ function simulateGameV3(league: League, game: ScheduledGame, seasonId: number): 
     score: { away: 0, home: 0 },
   };
   let over = false;
+
+  // Environment (engine v4). At most one event per half-inning. Its rolls come from a separate
+  // stream per plate appearance, so with no environment every other roll is unchanged.
+  let paIndex = 0;
+  let envRng: Rng | null = null;
+  let envUsedThisHalf = false;
+  let active: { def: EnvEventDef; effectsLeft: number; paLeft: number | null; changed: number } | null = null;
 
   const emit = (e: EmitPayload) => {
     events.push({
@@ -197,17 +213,125 @@ function simulateGameV3(league: League, game: ScheduledGame, seasonId: number): 
     return third ? [third] : [];
   };
 
-  const strike = (ids: { batterId: string; pitcherId: string }, called: boolean): boolean => {
+  const strike = (ids: { batterId: string; pitcherId: string }, called: boolean, cause?: CauseRef): boolean => {
     s.strikes += 1;
     if (s.strikes === 3) {
       s.outs += 1;
       s.balls = 0;
       s.strikes = 0;
-      emit({ kind: 'strikeout', ...ids, swinging: !called });
+      emit({ kind: 'strikeout', ...ids, swinging: !called, ...(cause && { cause }) });
+      if (cause) envEffect();
       return true;
     }
-    emit({ kind: called ? 'calledStrike' : 'swingingStrike', ...ids });
+    emit({ kind: called ? 'calledStrike' : 'swingingStrike', ...ids, ...(cause && { cause }) });
+    if (cause) envEffect();
     return false;
+  };
+
+  // --- Environment ---------------------------------------------------------------------------
+
+  const endEnv = () => {
+    if (active && active.changed === 0 && active.def.fizzle) emit({ kind: 'envEnd', envId: active.def.id });
+    active = null;
+  };
+
+  /** At the start of each plate appearance: age the active event, or maybe start one. */
+  const envBeginPa = () => {
+    if (!env) return;
+    envRng = createRng(...gameSeed(league.seed, seasonId, game.id), 'env', paIndex);
+    paIndex += 1;
+    if (active && active.paLeft !== null && --active.paLeft < 0) endEnv();
+    if (active || envUsedThisHalf) return;
+    for (const def of env.events) {
+      if (envRng.int(1_000_000) < def.chancePerMille * env.chaosPerMille) {
+        active = { def, effectsLeft: def.maxEffects ?? 1, paLeft: def.durationPA ?? null, changed: 0 };
+        envUsedThisHalf = true;
+        emit({ kind: 'envStart', envId: def.id });
+        return;
+      }
+    }
+  };
+
+  /** The active event if it fires here (spending one effect). Only call where it would change something. */
+  const envFires = (phase: EnvEventDef['phase'], type: EnvEventDef['effect']['type'], original?: string): EnvEventDef | null => {
+    if (!active || !envRng || active.def.phase !== phase || active.def.effect.type !== type || active.effectsLeft <= 0) return null;
+    const from = active.def.effect.from;
+    if (original && from && !from.includes(original)) return null;
+    if (!envRng.chance(active.def.effect.chancePerMille)) return null;
+    active.effectsLeft -= 1;
+    active.changed += 1;
+    return active.def;
+  };
+  const activeType = () => (active && active.effectsLeft > 0 ? active.def.effect.type : null);
+  const causeOf = (def: EnvEventDef, original: string): CauseRef => ({ type: 'env', id: def.id, original });
+  /** The attributed line that follows a changed play. */
+  const envEffect = (extra: Record<string, unknown> = {}) => emit({ kind: 'envEffect', envId: active!.def.id, changed: 'play', ...extra });
+  const leadRunner = (): number => (s.bases[2] ? 2 : s.bases[1] ? 1 : s.bases[0] ? 0 : -1);
+  const onBase = () => s.bases.filter((x): x is string => x !== null);
+
+  /** prePitch effects that aren't about the pitch itself. True if one happened. */
+  const envPrePitch = (pitcherId: string): boolean => {
+    if (!active || active.def.phase !== 'prePitch' || !s.bases.some(Boolean)) return false;
+    const t = activeType();
+    if (t === 'wildPitch') {
+      const def = envFires('prePitch', t);
+      if (!def) return false;
+      emit({ kind: 'wildPitch', pitcherId, advanced: onBase(), cause: causeOf(def, 'no wild pitch') });
+      envEffect();
+      scoreAll(everyoneUp(null));
+      return true;
+    }
+    if (t === 'runnersAdvance') {
+      const def = envFires('prePitch', t);
+      if (!def) return false;
+      const advanced = onBase();
+      const scored = everyoneUp(null);
+      emit({ kind: 'envEffect', envId: def.id, changed: 'runners advance', advanced, cause: causeOf(def, 'runners held') });
+      scoreAll(scored);
+      return true;
+    }
+    if (t === 'pickoff') {
+      const from: 1 | 2 | null = s.bases[1] ? 2 : s.bases[0] ? 1 : null;
+      const def = from ? envFires('prePitch', t) : null;
+      if (!from || !def) return false;
+      const runnerId = s.bases[from - 1]!;
+      s.bases[from - 1] = null;
+      s.outs += 1;
+      emit({ kind: 'pickoff', runnerId, base: from, pitcherId, cause: causeOf(def, 'runner safe') });
+      envEffect();
+      return true;
+    }
+    return false;
+  };
+
+  /** afterPlay effects, once a plate appearance is over and the inning isn't. */
+  const envAfterPlay = () => {
+    if (!active || active.def.phase !== 'afterPlay' || over || s.outs >= 3) return;
+    const t = activeType();
+    const lead = leadRunner();
+    if (lead < 0 || !t) return;
+    if (t === 'extraRun' || (t === 'runnerHome' && s.bases[2])) {
+      const def = envFires('afterPlay', t);
+      if (!def) return;
+      const base = t === 'runnerHome' ? 2 : lead;
+      const runner = s.bases[base]!;
+      s.bases[base] = null;
+      emit({ kind: 'envEffect', envId: def.id, changed: 'run scores', cause: causeOf(def, 'runner held') });
+      scoreRun(runner);
+    } else if (t === 'runnerRemoved') {
+      const def = envFires('afterPlay', t);
+      if (!def) return;
+      const removedId = s.bases[lead]!;
+      s.bases[lead] = null;
+      emit({ kind: 'envEffect', envId: def.id, changed: 'runner removed', removedId, cause: causeOf(def, 'runner on base') });
+    } else if (t === 'runnersAdvance') {
+      const def = envFires('afterPlay', t);
+      if (!def) return;
+      const advanced = onBase();
+      const scored = everyoneUp(null);
+      emit({ kind: 'envEffect', envId: def.id, changed: 'runners advance', advanced, cause: causeOf(def, 'runners held') });
+      scoreAll(scored);
+    }
   };
 
   /**
@@ -236,7 +360,60 @@ function simulateGameV3(league: League, game: ScheduledGame, seasonId: number): 
     return s.outs >= 3;
   };
 
+  /** onContact effects on a hit. True if the environment changed the play (and it's been played out). */
+  const envContactOnHit = (ids: { batterId: string; pitcherId: string }, hit: HitKind): boolean => {
+    const t = activeType();
+    if (!t || active!.def.phase !== 'onContact') return false;
+    let def: EnvEventDef | null = null;
+    let to: string | undefined;
+    if (t === 'upgradeHit' && hit !== 'homeRun') [def, to] = [envFires('onContact', t), HIT_UP[hit]];
+    else if (t === 'downgradeHit' && hit !== 'single') [def, to] = [envFires('onContact', t), HIT_DOWN[hit]];
+    else if (t === 'hitToOut') [def, to] = [envFires('onContact', t, hit), active!.def.effect.to ?? 'flyout'];
+    else if (t === 'homeRunToOut' && hit === 'homeRun') [def, to] = [envFires('onContact', t), active!.def.effect.to ?? 'flyout'];
+    if (!def || !to) return false;
+    const cause = causeOf(def, hit);
+    if (isHitKind(to)) {
+      emit({ kind: 'hit', ...ids, hit: to, cause });
+      envEffect();
+      advanceOnHit(ids.batterId, to);
+    } else {
+      const out = to as OutKind;
+      const fielderId = fielderAt(fieldingTeam(), FIELDERS[out][envRng!.int(FIELDERS[out].length)]);
+      s.outs += 1;
+      emit({ kind: 'out', ...ids, out, sacrifice: false, fielderId, cause });
+      envEffect();
+    }
+    return true;
+  };
+
+  /** onContact effects on an out. True if the environment changed the play. */
+  const envContactOnOut = (ids: { batterId: string; pitcherId: string }, out: OutKind, fielderId: string): boolean => {
+    const t = activeType();
+    if (!t || active!.def.phase !== 'onContact') return false;
+    let def: EnvEventDef | null = null;
+    if (t === 'outToHit' || t === 'outToHomeRun' || t === 'induceError') def = envFires('onContact', t, out);
+    if (!def) return false;
+    const cause = causeOf(def, out);
+    if (t === 'induceError') {
+      emit({ kind: 'error', fielderId, ...ids, onKind: out, bases: 1, cause });
+      envEffect();
+      scoreAll(everyoneUp(ids.batterId));
+      return true;
+    }
+    const hit: HitKind = t === 'outToHomeRun' ? 'homeRun' : isHitKind(def.effect.to) ? def.effect.to : 'single';
+    emit({ kind: 'hit', ...ids, hit, cause });
+    envEffect();
+    advanceOnHit(ids.batterId, hit);
+    return true;
+  };
+
   const plateAppearance = () => {
+    envBeginPa();
+    resolvePa();
+    envAfterPlay();
+  };
+
+  const resolvePa = () => {
     const side = battingSide();
     const team = battingTeam();
     const batterId = team.lineup[order[side] % team.lineup.length];
@@ -254,12 +431,48 @@ function simulateGameV3(league: League, game: ScheduledGame, seasonId: number): 
     const hitPm = clamp(330 + (b.contact - pr.velocity) * 2 - (defense[fieldingSide()] - 50), 180, 460);
 
     for (;;) {
-      if (runnerGame(pitcherId)) {
+      if (runnerGame(pitcherId) || (envPrePitch(pitcherId) && s.outs >= 3)) {
         // Third out on the bases: this batter leads off next inning instead.
         order[side] -= 1;
         return;
       }
-      if (rng.chance(ballPm)) {
+      if (over) return;
+      // The pitch, rolled exactly as engine v3 does (same calls, same order).
+      let pitch: PitchKind = rng.chance(ballPm) ? 'ball' : rng.chance(220) ? 'called' : !rng.chance(contactPm) ? 'swinging' : rng.chance(450) ? 'foul' : 'inPlay';
+      let forced: CauseRef | undefined;
+      const t = activeType();
+      if (t === 'forceBall' && pitch !== 'ball') {
+        const def = envFires('prePitch', t);
+        if (def) {
+          forced = causeOf(def, PITCH_NAMES[pitch]);
+          pitch = 'ball';
+        }
+      } else if (t === 'forceStrike' && pitch === 'ball') {
+        const def = envFires('prePitch', t);
+        if (def) {
+          forced = causeOf(def, PITCH_NAMES[pitch]);
+          pitch = 'called';
+        }
+      }
+      if (forced && pitch === 'ball') {
+        s.balls += 1;
+        if (s.balls === 4) {
+          s.balls = 0;
+          s.strikes = 0;
+          emit({ kind: 'walk', ...ids, cause: forced });
+          envEffect();
+          forceToFirst(batterId);
+          return;
+        }
+        emit({ kind: 'ball', ...ids, cause: forced });
+        envEffect();
+        continue;
+      }
+      if (forced) {
+        if (strike(ids, true, forced)) return;
+        continue;
+      }
+      if (pitch === 'ball') {
         if (perTenK(RATES.hbp(pr.control))) {
           s.balls = 0;
           s.strikes = 0;
@@ -285,15 +498,15 @@ function simulateGameV3(league: League, game: ScheduledGame, seasonId: number): 
         }
         continue;
       }
-      if (rng.chance(220)) {
+      if (pitch === 'called') {
         if (strike(ids, true)) return;
         continue;
       }
-      if (!rng.chance(contactPm)) {
+      if (pitch === 'swinging') {
         if (strike(ids, false)) return;
         continue;
       }
-      if (rng.chance(450)) {
+      if (pitch === 'foul') {
         if (s.strikes < 2) s.strikes += 1;
         emit({ kind: 'foul', ...ids });
         continue;
@@ -314,12 +527,14 @@ function simulateGameV3(league: League, game: ScheduledGame, seasonId: number): 
               : roll < hrPm + triplePm + doublePm
                 ? 'double'
                 : 'single';
+        if (envContactOnHit(ids, hit)) return;
         emit({ kind: 'hit', ...ids, hit });
         advanceOnHit(batterId, hit);
         return;
       }
       const out: OutKind = rng.pick(['groundout', 'groundout', 'flyout', 'flyout', 'lineout', 'popout'] as const);
       const fielderId = fielderAt(fieldingTeam(), rng.pick(FIELDERS[out]));
+      if (envContactOnOut(ids, out, fielderId)) return;
 
       if (rng.chance(RATES.error(fieldingRating(p(fielderId).ratings)))) {
         emit({ kind: 'error', fielderId, batterId, pitcherId, onKind: out, bases: 1 });
@@ -365,7 +580,9 @@ function simulateGameV3(league: League, game: ScheduledGame, seasonId: number): 
       s.bases[1] = team.lineup[(order[side] + team.lineup.length - 1) % team.lineup.length];
     }
     emit({ kind: 'halfStart', battingTeamId: battingTeam().id });
+    envUsedThisHalf = false;
     while (s.outs < 3 && !over) plateAppearance();
+    endEnv();
     if (over) break;
     emit({ kind: 'halfEnd' });
 

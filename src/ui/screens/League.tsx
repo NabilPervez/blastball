@@ -13,6 +13,8 @@ import { Leaders, PickButtons } from '../components/FanFeatures';
 import { useGame } from '../store';
 import { allTimeRecord, isRivalry, RIVAL_MIN_GAMES, rivalsOf, stadiumDetails, stadiumPerk, teamBio, teamPerk, winsVs } from '../../world/teams';
 import { tierOf } from '../../world/rarity';
+import { climateDef, forecast } from '../../world/environment';
+import { isActiveMod } from '../../world/weird';
 import { LinkedText } from '../components/LinkedText';
 
 const teamOf = (u: UniverseState, id: string) => u.league.teams.find((t) => t.id === id)!;
@@ -408,6 +410,28 @@ function TeamPage({ u, teamId }: { u: UniverseState; teamId: string }) {
                 <span aria-hidden="true">{sp.icon}</span> <strong>{sp.name}</strong> <span className="muted small">— {sp.description}</span>
                 <br />
                 <span className="small mod-effect">{describeDelta(sp.delta)} for the {team.name} in home games.</span>
+              </p>
+            </>
+          );
+        })()}
+        <span className="eyebrow">Climate</span>
+        {(() => {
+          const st = u.weird.stadiums[teamId];
+          const climates = st?.climates ?? [];
+          const mods = (st?.mods ?? []).filter((m) => isActiveMod(m, u.season, u.currentDay)).map((m) => m.id);
+          const could = forecast(climates, mods, u.settings.chaos);
+          return (
+            <>
+              <p className="climates">
+                {climates.map((c) => (
+                  <span key={c} className="pill">
+                    <span aria-hidden="true">{climateDef(c)?.icon}</span> {climateDef(c)?.name ?? c}
+                  </span>
+                ))}
+              </p>
+              <p className="small muted">
+                {could.length ? `What can happen here during a game: ${could.map((x) => `${x.icon} ${x.name}`).join(', ')}.` : 'Nothing strange can happen here at this chaos level.'}
+                {u.engineVersion < 4 && ' Environment events begin next season.'}
               </p>
             </>
           );
