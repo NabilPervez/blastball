@@ -118,6 +118,10 @@ export interface EnvEventDef {
 export interface GameEnvironment {
   events: EnvEventDef[];
   chaosPerMille: number;
+  /** Starts at the first plate appearance of the bottom of the 1st, no roll (Hype Squad's Wave). */
+  forcedEnv?: EnvEventDef;
+  /** Late home rally while the fan watches (Hype Squad L2): +1 Contact per run behind from the 8th, up to `max`. */
+  rally?: { teamId: string; max: number };
 }
 
 /** Why an event happened differently than the engine first rolled (environment events, Sprint 13). */

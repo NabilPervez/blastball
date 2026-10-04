@@ -134,8 +134,8 @@ describe('personas', () => {
   it('Analyst: reveals one real hidden rating, the same one every time', () => {
     const u = fresh();
     for (const p of Object.values(u.league.players).slice(0, 20)) {
-      const r = analystReveal(p);
-      expect(analystReveal(p)).toEqual(r);
+      const [r] = analystReveal(p);
+      expect(analystReveal(p)[0]).toEqual(r);
       expect(Object.values(p.ratings)).toContain(r.value);
     }
   });

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { ScheduledGame } from '../../engine/types';
-import { betsThisSeason, gamesOn, isSeasonOver, lastScheduledDay, seasonDays, unplayedToday } from '../../world/universe';
+import { betsThisSeason, gamesOn, isSeasonOver, lastScheduledDay, seasonDays, stadiumEnvironment, unplayedToday } from '../../world/universe';
 import { formatMult } from '../../engine/odds';
 import { BetPanel, MassBet } from '../components/BetPanel';
 import { BaseDiamond, Outs, TeamBadge } from '../components/bits';
@@ -8,6 +8,7 @@ import { useGame } from '../store';
 import { DayCountdown, FirstPitch, useNow } from '../components/TimeBits';
 import { describeEvent } from '../../narrative/playByPlay';
 import { narrativeExtras } from '../../narrative/fromUniverse';
+import { perk } from '../../world/persona';
 import { GameView } from './GameView';
 
 export function GameCard({ game }: { game: ScheduledGame }) {
@@ -62,6 +63,14 @@ export function GameCard({ game }: { game: ScheduledGame }) {
           </span>
         )}
         {progress && playIdx >= 0 && <span className="gc-play">{describeEvent(u.league, game, progress.events, playIdx, narrativeExtras(u, game))}</span>}
+        {!r && today && perk(u.persona, 'stadiumForecast') && u.engineVersion >= 4 && (
+          <span className="gc-forecast small muted">
+            🌦 Forecast:{' '}
+            {stadiumEnvironment(u, game)
+              .events.map((e) => `${e.icon} ${e.name}`)
+              .join(', ') || 'calm skies'}
+          </span>
+        )}
         <span className={`gc-status ${!r && today ? 'live' : ''}`}>
           {series && <span className="pill">{series.round === u.playoffs!.finalRound ? 'Final' : 'Semifinal'} · game {series.games.indexOf(game.id) + 1}</span>} {now?.kind === 'gameEnd' ? 'Final — recording…' : status}
         </span>

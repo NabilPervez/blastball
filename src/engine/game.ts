@@ -77,7 +77,7 @@ type EmitPayload = { kind: GameEvent['kind'] } & Record<string, unknown>;
  */
 export function simulateGame(league: League, game: ScheduledGame, seasonId = 1, engineVersion = ENGINE_VERSION, env?: GameEnvironment): GameResult {
   if (engineVersion <= 2) return simulateGameV2(league, game, seasonId);
-  return simulateModern(league, game, seasonId, engineVersion >= 4 && env?.events.length ? env : null);
+  return simulateModern(league, game, seasonId, engineVersion >= 4 && env && (env.events.length || env.forcedEnv || env.rally) ? env : null);
 }
 
 const HIT_UP: Record<HitKind, HitKind> = { single: 'double', double: 'triple', triple: 'homeRun', homeRun: 'homeRun' };
@@ -119,6 +119,7 @@ function simulateModern(league: League, game: ScheduledGame, seasonId: number, e
   let paIndex = 0;
   let envRng: Rng | null = null;
   let envUsedThisHalf = false;
+  let forcedUsed = false;
   let active: { def: EnvEventDef; effectsLeft: number; paLeft: number | null; changed: number } | null = null;
 
   const emit = (e: EmitPayload) => {
@@ -242,6 +243,13 @@ function simulateModern(league: League, game: ScheduledGame, seasonId: number, e
     paIndex += 1;
     if (active && active.paLeft !== null && --active.paLeft < 0) endEnv();
     if (active || envUsedThisHalf) return;
+    if (env.forcedEnv && !forcedUsed && s.half === 'bottom') {
+      forcedUsed = true;
+      active = { def: env.forcedEnv, effectsLeft: env.forcedEnv.maxEffects ?? 1, paLeft: env.forcedEnv.durationPA ?? null, changed: 0 };
+      envUsedThisHalf = true;
+      emit({ kind: 'envStart', envId: env.forcedEnv.id });
+      return;
+    }
     for (const def of env.events) {
       if (envRng.int(1_000_000) < def.chancePerMille * env.chaosPerMille) {
         active = { def, effectsLeft: def.maxEffects ?? 1, paLeft: def.durationPA ?? null, changed: 0 };
@@ -419,8 +427,13 @@ function simulateModern(league: League, game: ScheduledGame, seasonId: number, e
     const batterId = team.lineup[order[side] % team.lineup.length];
     order[side] += 1;
     const pitcherId = pitchers[fieldingSide()];
-    const b = batterView(p(batterId).ratings);
+    let b = batterView(p(batterId).ratings);
     const pr = p(pitcherId).ratings;
+    const rally = env?.rally;
+    if (rally && team.id === rally.teamId && s.inning >= 8) {
+      const behind = s.score[fieldingSide()] - s.score[side];
+      if (behind > 0) b = { ...b, contact: b.contact + Math.min(behind, rally.max) };
+    }
     s.balls = 0;
     s.strikes = 0;
     emit({ kind: 'atBat', batterId, pitcherId });

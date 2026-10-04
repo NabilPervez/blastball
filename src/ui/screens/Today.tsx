@@ -8,6 +8,7 @@ import { PicksPanel } from '../components/FanFeatures';
 import { BackupReminder, DayCountdown, LivingClock, WhileYouWereGone } from '../components/TimeBits';
 import { NewsFeed } from './Vote';
 import { ChoosePersona, FanCard, Ledger, OpenBets } from '../components/Wallet';
+import { PersonaAbilities } from '../components/PersonaBits';
 import { useGame } from '../store';
 import { GameCard, TimeControls } from './Games';
 
@@ -55,6 +56,7 @@ export function Today() {
       <BackupReminder />
       <ChoosePersona />
       <FanCard />
+      <PersonaAbilities />
       <ChecklistCard />
       <ElectionCard />
       {prophecy(u) && (

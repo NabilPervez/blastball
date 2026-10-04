@@ -87,7 +87,7 @@ export interface DepartedRef {
 /** Chance (per mille) an election offers to bring back one of the Departed, when any exist. */
 export const RESURRECTION_OFFER_PM = 450;
 
-export function generateProposals(league: League, standings: FactionView['standings'], seedParts: (string | number)[], departed: DepartedRef[] = []): Proposal[] {
+export function generateProposals(league: League, standings: FactionView['standings'], seedParts: (string | number)[], departed: DepartedRef[] = [], resurrectionPm = RESURRECTION_OFFER_PM): Proposal[] {
   const rng = createRng(...seedParts, 'proposals');
   const leader = standings[0].teamId;
   const last = standings[standings.length - 1].teamId;
@@ -161,7 +161,7 @@ export function generateProposals(league: League, standings: FactionView['standi
   if (second >= first) second++;
   const firstProposal = pool[first]();
   let third = pool[second]();
-  if (departed.length && rng.chance(RESURRECTION_OFFER_PM)) {
+  if (departed.length && rng.chance(resurrectionPm)) {
     const d = rng.pick(departed);
     third = {
       title: `Bring Back ${d.name}`,
@@ -193,9 +193,11 @@ export function openElection(
   openedDay: number,
   lastDay: number,
   departed: DepartedRef[] = [],
+  /** The Historian's Level 2 raises this. */
+  resurrectionPm = RESURRECTION_OFFER_PM,
 ): Election {
   const seedParts = [league.seed, season, 'election', id];
-  const proposals = generateProposals(league, standings, seedParts, departed);
+  const proposals = generateProposals(league, standings, seedParts, departed, resurrectionPm);
   const views = proposals.map((proposal) => ({ standings, proposal }));
   return {
     id,

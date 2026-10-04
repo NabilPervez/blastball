@@ -3,7 +3,8 @@ import { setSetting } from '../../storage/db';
 import { MAX_CATCHUP_DAYS } from '../../world/clock';
 import { ORGANIZER_DISCOUNT_PCT } from '../../world/elections';
 import { FACTION_BUDGET } from '../../world/factions';
-import { DIEHARD_BONUS_PCT, GAMBLER_UNDERDOG_PCT, PERSONAS, type PersonaKind } from '../../world/persona';
+import { DIEHARD_BONUS_PCT, GAMBLER_UNDERDOG_PCT, LEVEL_THRESHOLDS, PERSONA_KINDS, PERSONAS, REBRAND_COST, xpOf } from '../../world/persona';
+import { PersonaLevels } from '../components/PersonaBits';
 import { FINAL_BEST_OF, SEMIS_BEST_OF } from '../../world/seasons';
 import { MAX_BACKED, MAX_FADED, PICK_RATES } from '../../world/picks';
 import { ENVIRONMENT } from '../../world/environment';
@@ -86,6 +87,7 @@ function Ladder() {
 
 export function Guide() {
   const { showIntro } = useGame();
+  const u = useGame((s) => s.u);
   useEffect(() => {
     void setSetting('guideOpened', true);
   }, []);
@@ -166,16 +168,25 @@ export function Guide() {
       </Section>
 
       <Section id="persona" title="Fan personas">
-        <p>You pick a persona when you create a league. It's chosen once and gives you a perk:</p>
-        <ul className="guide-list">
-          {(Object.keys(PERSONAS) as PersonaKind[]).map((k) => (
-            <li key={k}>
-              <strong>{PERSONAS[k].label}</strong> — {PERSONAS[k].flavor} <span className="perk">{PERSONAS[k].perk}</span>
-            </li>
+        <p>
+          You pick a persona when you create a league. Doing things that fit it earns <strong>Devotion XP</strong>: a Gambler winning underdog bets, an Organizer voting on the winning side, a Storm Chaser seeing the weather change a play. At {LEVEL_THRESHOLDS[1]} XP you reach Level 2 and a second perk; at {LEVEL_THRESHOLDS[2]} XP, Level 3 and a signature ability (used from the Today tab) plus a gold edge on your fan card. Level 2 takes about one or two seasons of regular play, Level 3 about three to five.
+        </p>
+        <p className="small">
+          You can <strong>Rebrand</strong> into a different persona from your fan card for {REBRAND_COST} coins. XP starts over.
+        </p>
+        <div className="guide-personas">
+          {PERSONA_KINDS.map((k) => (
+            <div key={k} className="card pad">
+              <p>
+                <strong>{PERSONAS[k].label}</strong> {PERSONAS[k].isNew && <span className="pill new-pill">New</span>} — <span className="muted">{PERSONAS[k].flavor}</span>
+                {u?.persona?.kind === k && <span className="pill"> yours</span>}
+              </p>
+              <PersonaLevels kind={k} xp={u?.persona?.kind === k ? xpOf(u.persona) : null} compact />
+            </div>
           ))}
-        </ul>
+        </div>
         <p className="muted small">
-          Exact numbers: Diehard +{DIEHARD_BONUS_PCT}% of the stake on winning bets for their team; Gambler +{GAMBLER_UNDERDOG_PCT}% on underdog odds; Organizer −{ORGANIZER_DISCOUNT_PCT}% vote prices; the Analyst sees one hidden rating per player; the Prophet gets an exact preview of tonight's strangeness.
+          Exact numbers: Diehard +{DIEHARD_BONUS_PCT}% of the stake on winning bets for their team; Gambler +{GAMBLER_UNDERDOG_PCT}% on underdog odds; Organizer −{ORGANIZER_DISCOUNT_PCT}% vote prices. Locked perks show 🔒; perks for your persona unlock as your XP grows.
         </p>
       </Section>
 

@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { formatMult } from '../../engine/odds';
 import type { ScheduledGame } from '../../engine/types';
-import { betError, currentOdds, massBetTargets, offeredMultiplier } from '../../world/universe';
+import { perk } from '../../world/persona';
+import { betError, currentOdds, freeBetError, massBetTargets, offeredMultiplier } from '../../world/universe';
 import { useGame } from '../store';
 import { TeamBadge } from './bits';
 
@@ -15,8 +16,12 @@ export function BetPanel({ game, onDone }: { game: ScheduledGame; onDone(): void
   const odds = currentOdds(u, game.id);
   const teams = [game.awayId, game.homeId].map((id) => u.league.teams.find((t) => t.id === id)!);
   const mult = offeredMultiplier(u, game.id, teamId);
-  const error = betError(u, game.id, teamId, amount);
-  const toWin = Math.floor((amount * mult) / 1000);
+  // The Gambler's weekly free bet (Level 2): offered only while it's available.
+  const freeOffered = !!perk(u.persona, 'freeBet') && !freeBetError(u, game.id, teamId, 1);
+  const [free, setFree] = useState(false);
+  const useFree = free && freeOffered;
+  const error = useFree ? freeBetError(u, game.id, teamId, amount) : betError(u, game.id, teamId, amount);
+  const toWin = Math.floor((amount * mult) / 1000) - (useFree ? amount : 0);
 
   return (
     <form
@@ -24,7 +29,7 @@ export function BetPanel({ game, onDone }: { game: ScheduledGame; onDone(): void
       onSubmit={(e) => {
         e.preventDefault();
         if (error) return;
-        dispatch({ type: 'betPlaced', gameId: game.id, teamId, amount }).then(onDone);
+        dispatch({ type: 'betPlaced', gameId: game.id, teamId, amount, ...(useFree && { free: true }) }).then(onDone);
       }}
     >
       <div className="bet-sides" role="radiogroup" aria-label="Pick a team">
@@ -71,7 +76,12 @@ export function BetPanel({ game, onDone }: { game: ScheduledGame; onDone(): void
           All in
         </button>
       </div>
-      <p className="small">{error ? <span className="neg">{error}</span> : <>Win {toWin} coins (stake included) if they win.</>}</p>
+      {freeOffered && (
+        <label className="small">
+          <input type="checkbox" checked={free} onChange={(e) => setFree(e.target.checked)} /> Use this week's free bet (up to {String(perk(u.persona, 'freeBet')?.max ?? 25)} coins, no stake taken)
+        </label>
+      )}
+      <p className="small">{error ? <span className="neg">{error}</span> : useFree ? <>Win {toWin} coins if they win; lose nothing if they don't.</> : <>Win {toWin} coins (stake included) if they win.</>}</p>
       <div className="row">
         <button className="btn primary inline" type="submit" disabled={!!error}>
           Place bet

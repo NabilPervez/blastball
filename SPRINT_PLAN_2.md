@@ -227,7 +227,7 @@ Everything in Plan 1's Universal DoD still applies (tests green, lint clean incl
 | 11 — Narrative v2 | ✅ Done (except Nabil's read-aloud spot check) — play-by-play from `content/narrative/templates.json`, pure context builder, weighted-specificity selection, per-game no-repeat, validator. Notes below. |
 | 12 — Engine v2 | ✅ Done — engine v3 in code (see notes), frozen v2 engine, six new events in band, new stats/leaders/pick lines, save v11. |
 | 13 — Environment events | ✅ Done — engine v4, climates, 32 events / 15 effect types, attributed two-line log, footer, stadium page, Prophet forecast, save v12. P1 forecast UI / digest headline / odds tweak not done. |
-| 14 — Streaks & personas | Not started. Open Question 1 answered (see notes). |
+| 14 — Streaks & personas | 🚧 In progress — streaks, slots, Lock, XP engine, 10 personas, all perks except Collector Scout and Historian early chapter (Sprint 16), abilities UI, Rebrand, save v13 are built. Still to do: per-perk tests, streak-rule tests, 60-season XP balance run, mobile picker check, digest level-up card. |
 | 15 — Achievements | Not started (needs Commissioner flag or stub) |
 | 16 — Binder & stories | Not started |
 | 17 — Shareable moments | Not started |

@@ -2,6 +2,7 @@ import Dexie, { type Table } from 'dexie';
 import type { GameEvent } from '../engine/types';
 import { isSeasonOver, PBP_DAYS_KEPT, type CommandResult, type UniverseState, type WorldEvent } from '../world/universe';
 import { migrateSave } from './migrate';
+import { perkValue } from '../world/persona';
 import { gamesToPrune, snapshotsToPrune, type SnapshotRef } from './retention';
 
 export interface UniverseRow {
@@ -124,7 +125,7 @@ export async function persistCommand(prev: UniverseState, result: CommandResult,
     if (state.currentDay !== prev.currentDay) {
       await saveSnapshot(state, isSeasonOver(state) ? 'seasonEnd' : 'daily', d, now);
       const games = await d.games.where('universeId').equals(state.id).toArray();
-      const drop = new Set(gamesToPrune(games, state.season, state.currentDay, PBP_DAYS_KEPT));
+      const drop = new Set(gamesToPrune(games, state.season, state.currentDay, PBP_DAYS_KEPT, perkValue(state.persona, 'extraPinnedGames')));
       await d.games.bulkDelete(games.filter((g) => drop.has(g.gameId) && !g.pinned).map((g) => [g.universeId, g.season, g.gameId] as [string, number, string]));
     }
   });

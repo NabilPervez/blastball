@@ -190,9 +190,13 @@ export const useGame = create<State>((set, get) => ({
   },
 
   watch: async (gameId) => {
-    set({ watchingGameId: gameId, tab: gameId ? 'games' : get().tab, detail: null });
     const u = get().u;
-    if (gameId && u && !u.results[gameId]) await get().dispatch({ type: 'gameStarted', gameId });
+    // Watching from the first pitch is logged before the game starts (and before the feed is
+    // simulated), so perks that depend on it replay exactly. Then the game starts.
+    if (gameId && u && !u.results[gameId] && !u.started.includes(gameId)) await get().dispatch({ type: 'watchedLive', gameId });
+    set({ watchingGameId: gameId, tab: gameId ? 'games' : get().tab, detail: null });
+    const now = get().u;
+    if (gameId && now && !now.results[gameId]) await get().dispatch({ type: 'gameStarted', gameId });
   },
 
   playByPlay: async (gameId) => {

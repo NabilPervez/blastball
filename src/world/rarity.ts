@@ -47,6 +47,15 @@ export function weirdnessScore(u: UniverseState, playerId: string): number {
   return score;
 }
 
+const TIER_AT: [Tier, number][] = [['uncommon', 2], ['rare', 4], ['epic', 6], ['legendary', 9]];
+
+/** The Collector's preview (Level 2): the next tier up and the weirdness score it needs. */
+export function nextTier(u: UniverseState, playerId: string): { tier: Tier; at: number; now: number } | null {
+  const now = weirdnessScore(u, playerId);
+  const next = TIER_AT.find(([, at]) => now < at);
+  return next ? { tier: next[0], at: next[1], now } : null;
+}
+
 export function tierOf(u: UniverseState, playerId: string): Tier {
   const s = weirdnessScore(u, playerId);
   if (s >= 9) return 'legendary';

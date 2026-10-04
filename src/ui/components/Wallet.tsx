@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { formatMult } from '../../engine/odds';
-import { PERSONAS, type Persona } from '../../world/persona';
+import { levelOf, PERSONAS, xpOf, type Persona } from '../../world/persona';
+import { PersonaLevels, RebrandControl } from './PersonaBits';
 import { useGame } from '../store';
 import { PersonaPicker, personaReady } from './PersonaPicker';
 import { FavoriteTeamControl } from './FanFeatures';
@@ -45,17 +46,23 @@ export function FanCard() {
   const fav = u.persona.favoriteTeamId ? u.league.teams.find((t) => t.id === u.persona!.favoriteTeamId) : null;
   const settled = u.bets.filter((b) => b.status !== 'open');
   const wins = settled.filter((b) => b.status === 'won').length;
-  const net = settled.reduce((s, b) => s + b.payout - b.amount, 0);
+  const net = settled.reduce((s, b) => s + b.payout - (b.free ? 0 : b.amount), 0);
+  const xp = xpOf(u.persona);
+  const level = levelOf(xp);
   return (
-    <div className="card fan-card">
+    <div className={`card fan-card level-${level}`}>
       <div>
-        <p className="eyebrow">{PERSONAS[u.persona.kind].label}</p>
-        <p className="display fan-name">{u.persona.fanName}</p>
-        <p className="muted small">
-          {fav ? `${fav.city} ${fav.name} fan · ` : ''}
-          {PERSONAS[u.persona.kind].perk}
+        <p className="eyebrow">
+          {PERSONAS[u.persona.kind].label} · Level {level}
         </p>
+        <p className="display fan-name">
+          {level === 3 && <span aria-hidden="true">✦ </span>}
+          {u.persona.fanName}
+        </p>
+        <p className="muted small">{fav ? `${fav.city} ${fav.name} fan` : ''}</p>
+        <PersonaLevels kind={u.persona.kind} xp={xp} compact />
         <FavoriteTeamControl />
+        <RebrandControl />
       </div>
       <div className="fan-stats">
         <span>

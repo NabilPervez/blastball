@@ -1,5 +1,5 @@
 import type { Team } from '../../engine/types';
-import { PERSONAS, type Persona, type PersonaKind } from '../../world/persona';
+import { PERSONA_KINDS, PERSONAS, type Persona, type PersonaKind } from '../../world/persona';
 
 /** Controlled persona form, used on universe creation and for saves made before personas existed. */
 export function PersonaPicker({ value, onChange, teams }: { value: Persona; onChange(p: Persona): void; teams: Team[] }) {
@@ -9,9 +9,11 @@ export function PersonaPicker({ value, onChange, teams }: { value: Persona; onCh
       <fieldset className="choice">
         <legend>Your fan persona</legend>
         <div className="persona-grid">
-          {(Object.keys(PERSONAS) as PersonaKind[]).map((k) => (
+          {PERSONA_KINDS.map((k) => (
             <button type="button" key={k} className="persona-option card" aria-pressed={value.kind === k} onClick={() => set({ kind: k })}>
-              <strong className="display">{PERSONAS[k].label}</strong>
+              <strong className="display">
+                {PERSONAS[k].label} {PERSONAS[k].isNew && <span className="pill new-pill">New</span>}
+              </strong>
               <span className="muted small">{PERSONAS[k].flavor}</span>
               <span className="small perk">{PERSONAS[k].perk}</span>
             </button>
@@ -23,7 +25,7 @@ export function PersonaPicker({ value, onChange, teams }: { value: Persona; onCh
         <input className="field" value={value.fanName} maxLength={32} onChange={(e) => set({ fanName: e.target.value })} placeholder="e.g. Section 12 Sam" />
       </label>
       <label>
-        Favorite team {value.kind === 'diehard' ? <span className="muted small">(required for the Diehard bonus)</span> : <span className="muted small">(optional)</span>}
+        Favorite team {needsFavorite(value.kind) ? <span className="muted small">(required for {PERSONAS[value.kind].label})</span> : <span className="muted small">(optional)</span>}
         <select className="field" value={value.favoriteTeamId ?? ''} onChange={(e) => set({ favoriteTeamId: e.target.value || null })}>
           <option value="">— none —</option>
           {teams.map((t) => (
@@ -37,4 +39,6 @@ export function PersonaPicker({ value, onChange, teams }: { value: Persona; onCh
   );
 }
 
-export const personaReady = (p: Persona) => p.fanName.trim().length > 0 && (p.kind !== 'diehard' || !!p.favoriteTeamId);
+/** The Diehard and the Hype Squad are about one team, so they need a favorite. */
+export const needsFavorite = (k: PersonaKind) => k === 'diehard' || k === 'hype-squad';
+export const personaReady = (p: Persona) => p.fanName.trim().length > 0 && (!needsFavorite(p.kind) || !!p.favoriteTeamId);

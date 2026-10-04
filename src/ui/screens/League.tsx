@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { avg, emptyLine, era, inningsPitched, type StatLine } from '../../engine/boxScore';
 import type { Player, RatingKey } from '../../engine/types';
-import { analystReveal } from '../../world/persona';
+import { analystReveal, perk, xpFor } from '../../world/persona';
 import { flavorOf } from '../../world/rarity';
-import { standingsOf, type UniverseState } from '../../world/universe';
+import { offseasonProjection, standingsOf, type UniverseState } from '../../world/universe';
 import { TeamBadge, Tip } from '../components/bits';
 import { describeDelta, RATING_HELP } from '../../world/statHelp';
 import { cardPropsFor, PlayerCard } from '../components/PlayerCard';
@@ -12,7 +12,7 @@ import { PatronPanel } from '../components/SeasonBits';
 import { Leaders, PickButtons } from '../components/FanFeatures';
 import { useGame } from '../store';
 import { allTimeRecord, isRivalry, RIVAL_MIN_GAMES, rivalsOf, stadiumDetails, stadiumPerk, teamBio, teamPerk, winsVs } from '../../world/teams';
-import { tierOf } from '../../world/rarity';
+import { nextTier, tierOf, TIER_LABEL } from '../../world/rarity';
 import { climateDef, forecast } from '../../world/environment';
 import { isActiveMod } from '../../world/weird';
 import { LinkedText } from '../components/LinkedText';
@@ -171,13 +171,17 @@ function Trophies({ u, teamId }: { u: UniverseState; teamId: string }) {
   );
 }
 
-/** The Analyst persona sees one extra hidden rating on each card. */
+/** The Analyst persona sees extra hidden ratings on each card: one, or two from Level 2. */
 function analystExtra(u: UniverseState, player: Player) {
-  if (u.persona?.kind !== 'analyst') return undefined;
-  const r = analystReveal(player);
+  const reveal = perk(u.persona, 'revealStats');
+  if (!reveal) return undefined;
   return (
-    <span className="pc-analyst" title="Hidden rating (Analyst perk)">
-      ◎ {r.label} <strong>{r.value}</strong>
+    <span className="pc-analyst" title="Hidden ratings (Analyst perk)">
+      {analystReveal(player, Number(reveal.value)).map((r) => (
+        <span key={r.label}>
+          ◎ {r.label} <strong>{r.value}</strong>{' '}
+        </span>
+      ))}
     </span>
   );
 }
@@ -610,6 +614,18 @@ function PlayerPage({ u, playerId }: { u: UniverseState; playerId: string }) {
   const season = u.seasonStats[playerId] ?? emptyLine();
   const career = u.careerStats[playerId] ?? emptyLine();
   const departure = u.weird.playerStatus[playerId] === 'departed' ? [...u.weird.departed].reverse().find((d) => d.playerId === playerId) : undefined;
+  const dispatch = useGame((s) => s.dispatch);
+  // Persona XP for looking: Analysts studying cards, Historians visiting the Departed (both capped per day).
+  const isDeparted = !!departure;
+  useEffect(() => {
+    const counts = u.xpToday?.dayCount === u.dayCount ? u.xpToday.counts : {};
+    if (xpFor(u.persona, 'cardViewed', {}, counts).xp) void dispatch({ type: 'cardViewed', playerId });
+    if (isDeparted && xpFor(u.persona, 'departedVisited', {}, counts).xp) void dispatch({ type: 'departedVisited', playerId });
+    // Once per opened page.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playerId]);
+  const next = perk(u.persona, 'previewRarity') ? nextTier(u, playerId) : null;
+  const projection = useMemo(() => (perk(u.persona, 'showOffseasonProjection') ? offseasonProjection(u, playerId) : null), [u, playerId]);
   return (
     <section>
       <button className="link-btn" onClick={() => showDetail({ kind: 'team', id: team.id })}>
@@ -640,6 +656,23 @@ function PlayerPage({ u, playerId }: { u: UniverseState; playerId: string }) {
             </p>
           )}
           <p className="flavor">“{flavorOf(playerId)}”</p>
+          {next && (
+            <p className="small perk-note">
+              ◈ Next rarity: <strong>{TIER_LABEL[next.tier]}</strong> at weirdness {next.at} (now {next.now}).
+            </p>
+          )}
+          {projection && (
+            <p className="small perk-note">
+              ◎ Projection if the offseason began now:{' '}
+              {projection.retires
+                ? 'retires.'
+                : Object.keys(projection.change).length
+                  ? Object.entries(projection.change)
+                      .map(([k, d]) => `${d! > 0 ? '+' : ''}${d} ${RATING_HELP[k as RatingKey].label}`)
+                      .join(', ')
+                  : 'no change.'}
+            </p>
+          )}
           <CollectButton u={u} playerId={playerId} />
           {u.persona && !['departed', 'retired'].includes(u.weird.playerStatus[playerId] ?? '') && <PickButtons player={player} />}
           <h2>Traits</h2>

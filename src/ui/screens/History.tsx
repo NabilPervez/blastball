@@ -15,9 +15,10 @@ const FILTERS: { id: TimelineKind | 'all'; label: string }[] = [
   { id: 'retirement', label: 'Retirements' },
   { id: 'rivalry', label: 'Rivalries' },
   { id: 'relegation', label: 'Relegations' },
+  { id: 'persona', label: 'You' },
 ];
 
-const KIND_MARK: Record<TimelineKind, string> = { election: '✦', death: '✕', return: '◎', weird: '◐', champion: '★', retirement: '◇', rivalry: '⚔', relegation: '⬇' };
+const KIND_MARK: Record<TimelineKind, string> = { election: '✦', death: '✕', return: '◎', weird: '◐', champion: '★', retirement: '◇', rivalry: '⚔', relegation: '⬇', persona: '♦' };
 
 function Timeline({ u }: { u: UniverseState }) {
   const [filter, setFilter] = useState<TimelineKind | 'all'>('all');

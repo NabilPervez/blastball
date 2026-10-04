@@ -133,6 +133,30 @@ export const migrations: Record<number, Migration> = {
     );
     return { ...save, weird: { ...weird, stadiums } };
   },
+  // v12 → v13 (Sprint 14): pick streaks and slot unlocks, persona XP, signature abilities.
+  // Lifetime pick coins are backfilled from what the save still remembers: the larger of this
+  // season's pick earnings and the pick payouts in the coin ledger (which keeps the last 200 entries).
+  12: (save) => {
+    const ledger = (save.ledger ?? []) as { amount: number; reason: string }[];
+    const fromLedger = ledger.filter((l) => l.reason.startsWith('Picks:')).reduce((sum, l) => sum + l.amount, 0);
+    const persona = save.persona as Record<string, unknown> | null;
+    return {
+      ...save,
+      persona: persona ? { ...persona, xp: 0 } : null,
+      picksLifetime: Math.max((save.pickEarnings as number) ?? 0, fromLedger),
+      pickStreaks: {},
+      pickLock: null,
+      perkUses: {},
+      xpToday: { dayCount: save.dayCount ?? 1, counts: {} },
+      watched: [],
+      rallyCry: null,
+      jinx: null,
+      waveGameId: null,
+      tempClimates: {},
+      collectorPaid: [],
+      forecastReveal: null,
+    };
+  },
 };
 
 export function migrateSave(raw: unknown): UniverseState {
