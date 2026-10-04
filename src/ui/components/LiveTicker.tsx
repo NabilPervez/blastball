@@ -1,4 +1,5 @@
 import { describeEvent, isBigMoment } from '../../narrative/playByPlay';
+import { narrativeExtras } from '../../narrative/fromUniverse';
 import { unplayedToday } from '../../world/universe';
 import { useGame } from '../store';
 import { BaseDiamond, Outs, TeamBadge } from './bits';
@@ -40,7 +41,6 @@ export function LiveTicker() {
   // Show the latest meaningful play, not every pitch.
   let playIdx = idx;
   while (playIdx > 0 && ['ball', 'calledStrike', 'swingingStrike', 'foul', 'atBat'].includes(live.events[playIdx].kind)) playIdx--;
-  const play = live.events[playIdx];
   const remaining = Object.keys(running).filter((id) => !u.results[id]).length;
 
   return (
@@ -69,7 +69,7 @@ export function LiveTicker() {
           </span>
         )}
         <span className="lt-play" aria-live="polite">
-          {describeEvent(u.league, play, playIdx, game.id)}
+          {describeEvent(u.league, game, live.events, playIdx, narrativeExtras(u, game))}
         </span>
       </button>
       <span className="lt-actions">

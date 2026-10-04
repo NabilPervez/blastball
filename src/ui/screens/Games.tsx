@@ -7,6 +7,7 @@ import { BaseDiamond, Outs, TeamBadge } from '../components/bits';
 import { useGame } from '../store';
 import { DayCountdown, FirstPitch, useNow } from '../components/TimeBits';
 import { describeEvent } from '../../narrative/playByPlay';
+import { narrativeExtras } from '../../narrative/fromUniverse';
 import { GameView } from './GameView';
 
 export function GameCard({ game }: { game: ScheduledGame }) {
@@ -60,7 +61,7 @@ export function GameCard({ game }: { game: ScheduledGame }) {
             <Outs outs={now.outs} />
           </span>
         )}
-        {progress && playIdx >= 0 && <span className="gc-play">{describeEvent(u.league, progress.events[playIdx], playIdx, game.id)}</span>}
+        {progress && playIdx >= 0 && <span className="gc-play">{describeEvent(u.league, game, progress.events, playIdx, narrativeExtras(u, game))}</span>}
         <span className={`gc-status ${!r && today ? 'live' : ''}`}>
           {series && <span className="pill">{series.round === u.playoffs!.finalRound ? 'Final' : 'Semifinal'} · game {series.games.indexOf(game.id) + 1}</span>} {now?.kind === 'gameEnd' ? 'Final — recording…' : status}
         </span>

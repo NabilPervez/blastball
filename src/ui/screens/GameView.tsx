@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { GameEvent } from '../../engine/types';
 import { describeEvent, isBigMoment } from '../../narrative/playByPlay';
+import { narrativeExtras } from '../../narrative/fromUniverse';
 import { BaseDiamond, Outs, TeamBadge } from '../components/bits';
 import { useGame } from '../store';
 import { isPinned, setPinned } from '../../storage/db';
@@ -102,6 +103,7 @@ export function GameView({ gameId }: { gameId: string }) {
   }
 
   const current = events[Math.max(0, shown - 1)];
+  const extras = narrativeExtras(u, game);
   const feed = events.slice(0, shown).map((e, i) => ({ e, i })).reverse();
 
   return (
@@ -168,7 +170,7 @@ export function GameView({ gameId }: { gameId: string }) {
       <ol className="feed" aria-live={done ? 'off' : 'polite'} aria-label="Play-by-play">
         {feed.map(({ e, i }) => (
           <li key={i} className={`feed-item ${isBigMoment(e) ? 'big' : ''} k-${e.kind}`}>
-            {describeEvent(u.league, e, i, game.id)}
+            {describeEvent(u.league, game, events, i, extras)}
           </li>
         ))}
       </ol>

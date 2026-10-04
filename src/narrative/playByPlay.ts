@@ -1,64 +1,160 @@
 import { createRng } from '../engine/rng';
-import type { GameEvent, League } from '../engine/types';
+import type { GameEvent, League, OutKind } from '../engine/types';
+import { buildContext, type NarrativeExtras } from './context';
+import { PLAY_TEMPLATES, type NarrativeContext, type PlayTemplate, type TemplateKind } from './templates';
 
-/** Template-based play-by-play text (TemplateProvider v0). Deterministic per event index. */
+export type { NarrativeExtras } from './context';
 
-const HIT_TEXT = {
-  single: ['{b} slaps a single into the outfield.', '{b} pokes a single through the gap.', '{b} bloops one in for a single.'],
-  double: ['{b} rips a double down the line!', '{b} splits the gap — that\'s a double.', '{b} hammers it off the wall for two.'],
-  triple: ['{b} legs out a triple!', '{b} sends it to the deepest corner and slides into third!'],
-  homeRun: ['{b} launches it out of here! HOME RUN!', '{b} sends one into orbit. Gone!', 'BLAST! {b} clears the fence!'],
-} as const;
+/**
+ * Play-by-play text from data templates (PRD 2 §E10). Of the templates whose `when` matches the
+ * play's context, the most specific (weighted, see KEY_RANK) win; ties are drawn by weight. Deterministic per event index.
+ */
 
-const OUT_TEXT = {
-  groundout: ['{b} grounds out.', '{b} chops one to the infield and is thrown out.'],
-  flyout: ['{b} flies out to the outfield.', '{b} lifts a lazy fly ball. Caught.'],
-  lineout: ['{b} lines out. Right at someone.', '{b} smokes a liner — snagged!'],
-  popout: ['{b} pops up. Easy out.', '{b} skies one straight up. Caught.'],
-} as const;
+export interface GameRef {
+  id: string;
+  awayId: string;
+  homeId: string;
+}
 
 const ordinal = (n: number) => n + (['th', 'st', 'nd', 'rd'][n % 100 > 10 && n % 100 < 14 ? 0 : n % 10] ?? 'th');
+const BASE_NAMES = ['first', 'second', 'third', 'home'];
 
-export function describeEvent(league: League, e: GameEvent, index: number, gameId: string): string {
-  const rng = createRng(league.seed, gameId, 'text', index);
-  const name = (id: string) => league.players[id]?.name ?? 'Someone';
+/** Positions that field each kind of out (engine v1 doesn't name a fielder, so the text picks one). */
+const FIELDERS: Record<OutKind, string[]> = {
+  groundout: ['1B', '2B', '3B', 'SS', 'SS', '2B'],
+  popout: ['C', '1B', '2B', '3B', 'SS'],
+  lineout: ['1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF'],
+  flyout: ['LF', 'CF', 'RF'],
+};
+
+export function templateKind(e: GameEvent): TemplateKind {
+  if (e.kind === 'hit') return `hit.${e.hit}`;
+  if (e.kind === 'out') return `out.${e.out}`;
+  return e.kind as TemplateKind;
+}
+
+/**
+ * How much each `when` key counts toward specificity. A rare, decisive fact (a walk-off) must beat
+ * two common ones (late + close), so specificity is a weighted key count rather than a plain one.
+ */
+const KEY_RANK: Partial<Record<string, number>> = { walkoff: 4, milestone: 4, env: 3, goAhead: 2, tying: 2, basesLoaded: 2 };
+
+const FLAVOR_PER_MILLE = 250;
+/** Plays rare enough that mod/favorite lines always apply. */
+const SIGNATURE_KINDS = new Set<TemplateKind>(['gameStart', 'gameEnd', 'hit.homeRun', 'hit.triple']);
+
+const matches = (t: PlayTemplate, ctx: NarrativeContext) => Object.entries(t.when ?? {}).every(([k, v]) => ctx[k as keyof NarrativeContext] === v);
+
+/**
+ * Most-specific matching templates, one drawn by weight. Templates in `used` are skipped while
+ * any of the pool is still fresh, so a game doesn't repeat itself until it runs out of lines.
+ */
+export function selectTemplate(templates: PlayTemplate[], ctx: NarrativeContext, rng: { int(n: number): number }, used?: ReadonlySet<string>): PlayTemplate | null {
+  const ok = templates.filter((t) => matches(t, ctx));
+  if (!ok.length) return null;
+  const spec = (t: PlayTemplate) => Object.keys(t.when ?? {}).reduce((sum, k) => sum + (KEY_RANK[k] ?? 1), 0);
+  const best = Math.max(...ok.map(spec));
+  const top = ok.filter((t) => spec(t) === best);
+  const fresh = used ? top.filter((t) => !used.has(t.id)) : top;
+  const pool = fresh.length ? fresh : top;
+  let roll = rng.int(pool.reduce((sum, t) => sum + t.weight, 0));
+  for (const t of pool) {
+    roll -= t.weight;
+    if (roll < 0) return t;
+  }
+  return pool[pool.length - 1];
+}
+
+/** Nearest batter/pitcher at or before `index`, for lines (like halfEnd) whose event doesn't carry one. */
+function lastId(events: GameEvent[], index: number, key: 'batterId' | 'pitcherId'): string | null {
+  for (let i = index; i >= 0; i--) {
+    const e = events[i] as Partial<Record<typeof key, string>>;
+    if (e[key]) return e[key]!;
+  }
+  return null;
+}
+
+function chooseTemplate(league: League, game: GameRef, events: GameEvent[], index: number, extras: NarrativeExtras, used: ReadonlySet<string>): PlayTemplate | null {
+  const rng = createRng(league.seed, game.id, 'text', index);
+  const kind = templateKind(events[index]);
+  const ctx = buildContext(events, index, game, extras);
+  // Mods and the favorite team are common, so on routine plays their flavor lines appear only
+  // about 1 time in 4; otherwise they'd repeat every at-bat.
+  if ((ctx.mod || ctx.favorite) && !SIGNATURE_KINDS.has(kind) && !createRng(league.seed, game.id, 'text-flavor', index).chance(FLAVOR_PER_MILLE)) {
+    ctx.mod = false;
+    ctx.favorite = false;
+  }
+  return selectTemplate(PLAY_TEMPLATES[kind], ctx, rng, used);
+}
+
+/** Every line's template for one game, chosen in order. Cached per event list, since the UI asks one line at a time. */
+const gameCache = new WeakMap<GameEvent[], { key: string; templates: (PlayTemplate | null)[] }>();
+
+/** The template a play's line is written from. */
+export function templateFor(league: League, game: GameRef, events: GameEvent[], index: number, extras: NarrativeExtras = {}): PlayTemplate | null {
+  const key = [league.seed, game.id, extras.stadium, extras.rivalry, extras.favoriteTeamId, !!extras.modName].join('|');
+  let hit = gameCache.get(events);
+  if (!hit || hit.key !== key) {
+    const used = new Set<string>();
+    const templates = events.map((_, i) => {
+      const t = chooseTemplate(league, game, events, i, extras, used);
+      if (t) used.add(t.id);
+      return t;
+    });
+    hit = { key, templates };
+    gameCache.set(events, hit);
+  }
+  return hit.templates[index];
+}
+
+export function describeEvent(league: League, game: GameRef, events: GameEvent[], index: number, extras: NarrativeExtras = {}): string {
+  const e = events[index];
+  const tpl = templateFor(league, game, events, index, extras);
+
+  const name = (id: string | null) => (id ? league.players[id]?.name : null) ?? 'Someone';
   const team = (id: string) => {
     const t = league.teams.find((x) => x.id === id);
     return t ? `${t.city} ${t.name}` : 'Somebody';
   };
-  const fill = (tpl: string, b: string) => tpl.replace('{b}', b);
-  const count = `${e.balls}-${e.strikes}`;
+  const battingId = e.half === 'top' ? game.awayId : game.homeId;
+  const fieldingId = e.half === 'top' ? game.homeId : game.awayId;
+  const t = e.kind === 'gameEnd' ? e.winnerId : e.kind === 'halfStart' ? e.battingTeamId : battingId;
+  const opp = e.kind === 'gameEnd' ? e.loserId : t === game.awayId ? game.homeId : game.awayId;
+  const batterId = lastId(events, index, 'batterId');
+  const pitcherId = e.kind === 'gameStart' ? e.awayPitcherId : lastId(events, index, 'pitcherId');
+  const modOf = (id: string | null) => (id && extras.modName?.(id)) || null;
 
-  switch (e.kind) {
-    case 'gameStart':
-      return `Play ball! ${name(e.awayPitcherId)} and ${name(e.homePitcherId)} take the mound.`;
-    case 'halfStart':
-      return `${e.half === 'top' ? 'Top' : 'Bottom'} of the ${ordinal(e.inning)}, ${team(e.battingTeamId)} batting.`;
-    case 'atBat':
-      return `${name(e.batterId)} steps up to bat.`;
-    case 'ball':
-      return `Ball. ${count}.`;
-    case 'calledStrike':
-      return `Strike, looking. ${count}.`;
-    case 'swingingStrike':
-      return `Strike, swinging. ${count}.`;
-    case 'foul':
-      return `Foul ball. ${count}.`;
-    case 'walk':
-      return `${name(e.batterId)} draws a walk.`;
-    case 'strikeout':
-      return e.swinging ? `${name(e.batterId)} strikes out swinging.` : `${name(e.batterId)} strikes out looking.`;
-    case 'hit':
-      return fill(rng.pick(HIT_TEXT[e.hit]), name(e.batterId));
-    case 'out':
-      return fill(rng.pick(OUT_TEXT[e.out]), name(e.batterId)) + (e.sacrifice ? ' The runner tags up.' : '');
-    case 'run':
-      return `${name(e.runnerId)} scores! ${e.score.away}-${e.score.home}.`;
-    case 'halfEnd':
-      return `End of the ${e.half} of the ${ordinal(e.inning)}.`;
-    case 'gameEnd':
-      return `Game over. ${team(e.winnerId)} win ${Math.max(e.score.away, e.score.home)}-${Math.min(e.score.away, e.score.home)}.`;
-  }
+  let fielder: string | null = null;
+  if (e.kind === 'out') {
+    const pos = createRng(league.seed, game.id, 'text-fielder', index).pick(FIELDERS[e.out]);
+    const fielding = league.teams.find((x) => x.id === fieldingId);
+    fielder = fielding?.lineup.find((id) => league.players[id]?.position === pos) ?? null;
+  } else if ('fielderId' in e) fielder = (e as { fielderId: string }).fielderId;
+
+  const hi = Math.max(e.score.away, e.score.home);
+  const lo = Math.min(e.score.away, e.score.home);
+  const vars: Record<string, string> = {
+    b: name(batterId),
+    p: name(pitcherId),
+    p2: e.kind === 'gameStart' ? name(e.homePitcherId) : '',
+    r: name('runnerId' in e ? (e as { runnerId: string }).runnerId : null),
+    f: fielder ? name(fielder) : 'the fielder',
+    t: team(t),
+    opp: team(opp),
+    stadium: extras.stadium ?? 'the ballpark',
+    mod: modOf(batterId) ?? modOf(pitcherId) ?? '',
+    env: '',
+    n: '',
+    score: e.kind === 'gameEnd' ? `${hi}-${lo}` : `${e.score.away}-${e.score.home}`,
+    count: `${e.balls}-${e.strikes}`,
+    half: e.half,
+    inning: ordinal(e.inning),
+    base: 'from' in e ? BASE_NAMES[(e as { from: number }).from] : '',
+  };
+
+  const text = (tpl?.text ?? '{b}.').replace(/\{(\w+)\}/g, (_, v: string) => vars[v] ?? '');
+  // Variables like {half} are lowercase, so capitalize wherever a sentence starts.
+  return text.replace(/(^|[.!?]\s+)([a-z])/g, (_, lead: string, c: string) => lead + c.toUpperCase());
 }
 
 /** Events worth highlighting in the feed. */
