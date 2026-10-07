@@ -96,7 +96,8 @@ export const personaLevel = (p: Persona | null) => (p ? levelOf(xpOf(p)) : 1);
 export function perk(p: Persona | null, type: string): PerkEffect | null {
   if (!p) return null;
   const lvl = personaLevel(p);
-  return PERSONA_DEFS[p.kind]?.levels.find((l) => l.level <= lvl && l.effect.type === type)?.effect ?? null;
+  // Highest level first: a Level 2 upgrade of a Level 1 perk (Analyst, Prophet) wins.
+  return PERSONA_DEFS[p.kind]?.levels.slice().reverse().find((l) => l.level <= lvl && l.effect.type === type)?.effect ?? null;
 }
 export const perkValue = (p: Persona | null, type: string, fallback = 0) => Number(perk(p, type)?.value ?? fallback);
 

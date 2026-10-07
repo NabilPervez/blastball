@@ -1,4 +1,6 @@
 import { MAX_CATCHUP_DAYS } from './clock';
+import { levelOf, PERSONA_DEFS, xpOf } from './persona';
+import { newUnlocks } from './picks';
 import { DAILY_STIPEND, standingsOf, type UniverseState, type WorldEvent } from './universe';
 
 /**
@@ -9,7 +11,7 @@ import { DAILY_STIPEND, standingsOf, type UniverseState, type WorldEvent } from 
 export interface DigestItem {
   importance: number;
   day: number;
-  kind: 'death' | 'return' | 'election' | 'paused' | 'team' | 'bets' | 'moment' | 'weird' | 'standings' | 'coins';
+  kind: 'level' | 'unlock' | 'death' | 'return' | 'election' | 'paused' | 'team' | 'bets' | 'moment' | 'weird' | 'standings' | 'coins';
   text: string;
 }
 
@@ -59,6 +61,19 @@ export function buildDigest(before: UniverseState, after: UniverseState, events:
         text: helped ? `Your votes backed the winner of election #${el.id}.` : `Your side lost election #${el.id}.`,
       });
     }
+  }
+
+  // Persona level-ups and pick-slot unlocks get a celebratory card at the top.
+  const was = before.persona;
+  const now = after.persona;
+  if (was && now && was.kind === now.kind) {
+    const def = PERSONA_DEFS[now.kind];
+    for (let lvl = levelOf(xpOf(was)) + 1; lvl <= levelOf(xpOf(now)); lvl++) {
+      items.push({ importance: 98, day: after.currentDay - 1, kind: 'level', text: `You reached Level ${lvl} as ${def.label}! New: ${def.levels[lvl - 1].perk}` });
+    }
+  }
+  for (const u of newUnlocks(before.picksLifetime ?? 0, after.picksLifetime ?? 0)) {
+    items.push({ importance: 97, day: after.currentDay - 1, kind: 'unlock', text: `Unlocked ${u.text} (${u.at.toLocaleString()} lifetime pick coins).` });
   }
 
   if (skippedDays > 0) {

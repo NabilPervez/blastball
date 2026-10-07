@@ -129,14 +129,36 @@ Everything in Plan 1's Universal DoD still applies (tests green, lint clean incl
 - P1: Rebrand (1,000 coins).
 
 **Definition of Done — Sprint 14**
-- [ ] Universal DoD met.
-- [ ] Unit tests for every streak rule in the PRD acceptance criteria (rounding, pause, reset).
-- [ ] XP balance run over 60 simulated seasons with a scripted "average player": Level 2 reached in season 1–2, Level 3 in season 3–5. Numbers recorded in this file.
-- [ ] Every perk for all 10 personas has a test proving it does something.
-- [ ] If Hype Squad changes outcomes: a replay test proves `watchedLive` inputs reproduce the same results.
-- [ ] Persona picker fits on a 380px screen with 10 options (scroll or 2-column grid).
-- [ ] Migration v12 → v13 fixture test.
-- [ ] Guide lists every persona's three levels with locked/unlocked states.
+- [ ] Universal DoD met. (Tests, typecheck and lint pass; not yet checked on a real Android phone.)
+- [x] Unit tests for every streak rule in the PRD acceptance criteria (rounding, pause, reset) — `tests/streaks.test.ts`.
+- [x] XP balance run over 60 simulated seasons with a scripted "average player": Level 2 reached in season 1–2, Level 3 in season 3–5. Numbers recorded below.
+- [x] Every perk for all 10 personas has a test proving it does something — `tests/perks.test.ts` (Collector Scout and Historian early chapter are asserted as Sprint 16 stubs).
+- [x] If Hype Squad changes outcomes: a replay test proves `watchedLive` inputs reproduce the same results.
+- [x] Persona picker fits on a 380px screen with 10 options (2-column grid, no horizontal scroll; checked in the browser at 380×800).
+- [x] Migration v12 → v13 fixture test.
+- [x] Guide lists every persona's three levels with locked/unlocked states.
+
+**Sprint 14 notes**
+- **Hype Squad (Open Question 1).** Built as a rating boost logged before the game (+2 at Level 1, late-rally boost at Level 2, a forced Crowd Surge at Level 3). This fits "player stats mods are ok": the boost feeds the sim, nothing writes a result. Nabil confirmed this reading (2026-10-06).
+- **Bug fixed:** when a persona has the same perk type at two levels (Analyst's reveal 1→2, Prophet's hint→named target), `perk()` returned the Level 1 version. It now prefers the highest unlocked level.
+- **XP balance** (`XP_BALANCE=1 npx vitest run tests/xpBalance.test.ts`, ~7 s). 16 teams, 20-game seasons, Normal chaos, favorite team t1. The "average player" opens the app once a day: one bet of ~10% of coins, watches the favorite's game, views 3 cards and collects 1, keeps picks full, buys 2 votes per election. It leans a little into its persona (Gamblers and Contrarians bet underdogs, Collectors collect 2 cards, Organizers add a vote each day). XP rules were retuned toward ~300 XP per season: Diehard ×1.8, Gambler ×2, Prophet ×0.5, Organizer ×3, Collector 5→7 per card, Historian milestone 8→20 and visit 3→7, Hype Squad ×2.5. Analyst, Contrarian and Storm Chaser were already in band.
+
+  | Persona | L2 season | L3 season | XP after seasons 1–6 |
+  |---|---|---|---|
+  | Diehard | 2 | 5 | 254 / 486 / 806 / 1158 / 1522 / 1842 |
+  | Analyst | 2 | 4 | 338 / 706 / 1080 / 1430 / 1844 / 2188 |
+  | Gambler | 2 | 5 | 320 / 580 / 870 / 1160 / 1420 / 1710 |
+  | Prophet | 2 | 5 | 280 / 574 / 822 / 1122 / 1408 / 1650 |
+  | Organizer | 2 | 5 | 180 / 420 / 890 / 1160 / 1540 / 1980 |
+  | Contrarian | 2 | 4 | 243 / 525 / 870 / 1221 / 1599 / 1947 |
+  | Collector | 2 | 5 | 280 / 560 / 840 / 1120 / 1400 / 1680 |
+  | Storm Chaser | 2 | 4 | 354 / 718 / 1134 / 1570 / 1909 / 2243 |
+  | Historian | 2 | 4 | 77 / 417 / 1137 / 2117 / 3717 / 4717 |
+  | Hype Squad | 2 | 5 | 260 / 556 / 876 / 1196 / 1456 / 1728 |
+
+  Watch-outs: the Historian starts slowly (few departed or milestones in season 1) and then speeds up, and story chapters (Sprint 16) will add more on top. The Collector's binder pages and foils (Sprint 16) will speed it up too. Re-run the balance test in Sprint 16.
+- **Digest:** level-ups and slot unlocks now get a highlighted card at the top of "While You Were Gone".
+- **Small inconsistency:** the Organizer's vote discount still comes from `ORGANIZER_DISCOUNT_PCT` in `elections.ts`, keyed on persona kind, not from the content file's `voteDiscountPct` value (both are 20).
 
 ---
 
@@ -227,7 +249,7 @@ Everything in Plan 1's Universal DoD still applies (tests green, lint clean incl
 | 11 — Narrative v2 | ✅ Done (except Nabil's read-aloud spot check) — play-by-play from `content/narrative/templates.json`, pure context builder, weighted-specificity selection, per-game no-repeat, validator. Notes below. |
 | 12 — Engine v2 | ✅ Done — engine v3 in code (see notes), frozen v2 engine, six new events in band, new stats/leaders/pick lines, save v11. |
 | 13 — Environment events | ✅ Done — engine v4, climates, 32 events / 15 effect types, attributed two-line log, footer, stadium page, Prophet forecast, save v12. P1 forecast UI / digest headline / odds tweak not done. |
-| 14 — Streaks & personas | 🚧 In progress — streaks, slots, Lock, XP engine, 10 personas, all perks except Collector Scout and Historian early chapter (Sprint 16), abilities UI, Rebrand, save v13 are built. Still to do: per-perk tests, streak-rule tests, 60-season XP balance run, mobile picker check, digest level-up card. |
+| 14 — Streaks & personas | ✅ Done (pending a real-phone check) — streaks, slots, Lock, XP engine retuned by a 60-season balance run, 10 personas with tested perks (2 stubbed for Sprint 16), abilities, Rebrand, digest level-up card, save v13. Notes below. |
 | 15 — Achievements | Not started (needs Commissioner flag or stub) |
 | 16 — Binder & stories | Not started |
 | 17 — Shareable moments | Not started |

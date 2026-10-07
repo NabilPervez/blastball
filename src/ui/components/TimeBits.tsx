@@ -105,6 +105,8 @@ export function DayCountdown() {
 }
 
 const KIND_LABEL: Record<string, string> = {
+  level: 'Level up',
+  unlock: 'Unlocked',
   death: 'Departed',
   return: 'Returned',
   election: 'Election',

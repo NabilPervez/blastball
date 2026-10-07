@@ -759,7 +759,7 @@ export function voteError(s: UniverseState, electionId: number, proposal: number
 }
 
 /** The Organizer's Level 2: each faction whose opinion of you rose has a 50% chance (seeded) of rising one more. */
-function withOpinionGain(s: UniverseState, before: Record<string, number>, after: Record<string, number>, tag: string): Record<string, number> {
+export function withOpinionGain(s: UniverseState, before: Record<string, number>, after: Record<string, number>, tag: string): Record<string, number> {
   const pct = perkValue(s.persona, 'opinionGainPct');
   if (!pct) return after;
   const out = { ...after };

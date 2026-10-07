@@ -16,18 +16,18 @@
       "xpRules": [
         {
           "on": "betWon",
-          "xp": 10,
+          "xp": 18,
           "when": {
             "team": "favorite"
           }
         },
         {
           "on": "favoriteWin",
-          "xp": 5
+          "xp": 9
         },
         {
           "on": "favoriteLoss",
-          "xp": 3
+          "xp": 5
         }
       ],
       "levels": [
@@ -125,14 +125,14 @@
       "xpRules": [
         {
           "on": "betWon",
-          "xp": 15,
+          "xp": 30,
           "when": {
             "underdog": true
           }
         },
         {
           "on": "betPlaced",
-          "xp": 2
+          "xp": 4
         }
       ],
       "levels": [
@@ -174,18 +174,18 @@
       "xpRules": [
         {
           "on": "weirdEvent",
-          "xp": 8
+          "xp": 4
         },
         {
           "on": "envEffect",
-          "xp": 4,
+          "xp": 2,
           "when": {
             "watched": true
           }
         },
         {
           "on": "betWon",
-          "xp": 10,
+          "xp": 6,
           "when": {
             "gameHadEnv": true
           }
@@ -229,18 +229,18 @@
       "xpRules": [
         {
           "on": "voteBought",
-          "xp": 3
+          "xp": 9
         },
         {
           "on": "electionWon",
-          "xp": 20,
+          "xp": 40,
           "when": {
             "playerVoted": true
           }
         },
         {
           "on": "factionOpinionUp",
-          "xp": 10
+          "xp": 30
         }
       ],
       "levels": [
@@ -336,7 +336,7 @@
       "xpRules": [
         {
           "on": "cardCollected",
-          "xp": 5
+          "xp": 7
         },
         {
           "on": "foilEarned",
@@ -440,11 +440,11 @@
         },
         {
           "on": "milestone",
-          "xp": 8
+          "xp": 20
         },
         {
           "on": "departedVisited",
-          "xp": 3,
+          "xp": 7,
           "when": {
             "capPerDay": 3
           }
@@ -487,14 +487,14 @@
       "xpRules": [
         {
           "on": "watchedLive",
-          "xp": 4,
+          "xp": 10,
           "when": {
             "capPerDay": 3
           }
         },
         {
           "on": "favoriteWin",
-          "xp": 5,
+          "xp": 12,
           "when": {
             "home": true
           }
